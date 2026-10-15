@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Finanças">
+  <title>Finanças</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icones/icone-192.png">
+  <link rel="stylesheet" href="css/estilo.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body data-tela="inicio">
+  <header class="topo">
+    <button class="botao-icone navegacao-mes" id="mes-anterior" aria-label="Mês anterior">‹</button>
+    <h1 id="titulo-topo">Finanças</h1>
+    <button class="botao-icone navegacao-mes" id="mes-seguinte" aria-label="Próximo mês">›</button>
+  </header>
+
+  <main>
+    <section class="tela" id="tela-inicio">
+      <div class="painel-saldo">
+        <span class="rotulo">Sobra prevista no mês</span>
+        <strong class="saldo" id="resumo-saldo">R$ 0,00</strong>
+        <div class="painel-saldo-linhas">
+          <div><span class="rotulo">Entrou</span><span id="resumo-receitas">R$ 0,00</span></div>
+          <div><span class="rotulo">Saiu</span><span id="resumo-despesas">R$ 0,00</span></div>
+          <div><span class="rotulo">Falta pagar</span><span id="resumo-a-pagar">R$ 0,00</span></div>
+        </div>
+      </div>
+
+      <h2>Minhas instituições</h2>
+      <div class="carrossel" id="lista-saldos-instituicoes"></div>
+
+      <h2>Contas do mês</h2>
+      <ul class="lista" id="lista-contas-do-mes"></ul>
+      <p class="vazio" id="vazio-contas-do-mes">Nenhuma conta fixa ou fatura de cartão neste mês.</p>
+
+      <h2>Orçamento</h2>
+      <ul class="lista" id="lista-orcamento"></ul>
+      <p class="vazio" id="vazio-orcamento">Coloque um limite mensal nas categorias (em Ajustes) para acompanhar aqui.</p>
+    </section>
+
+    <section class="tela" id="tela-lancamentos">
+      <div class="filtros" id="filtros-lancamentos">
+        <button class="filtro ativo" data-filtro="todos">Todos</button>
+        <button class="filtro" data-filtro="despesa">Saídas</button>
+        <button class="filtro" data-filtro="receita">Entradas</button>
+        <button class="filtro" data-filtro="credito">Cartão</button>
+      </div>
+      <ul class="lista" id="lista-lancamentos"></ul>
+      <p class="vazio" id="vazio-lancamentos">Nada lançado neste mês. Toque no + para começar.</p>
+    </section>
+
+    <section class="tela" id="tela-graficos">
+      <h2>Para onde foi o dinheiro</h2>
+      <div class="rosca">
+        <svg id="grafico-rosca" viewBox="0 0 42 42" role="img" aria-label="Despesas por categoria"></svg>
+        <div class="rosca-centro">
+          <span class="rotulo">Total</span>
+          <strong id="rosca-total">R$ 0,00</strong>
+        </div>
+      </div>
+      <ul class="legenda" id="legenda-rosca"></ul>
+
+      <h2>Últimos 6 meses</h2>
+      <div class="legenda-barras">
+        <span><span class="marcador marcador-receita"></span>Entrou</span>
+        <span><span class="marcador marcador-despesa"></span>Saiu</span>
+      </div>
+      <div class="barras-meses" id="barras-meses"></div>
+    </section>
+
+    <section class="tela" id="tela-metas">
+      <ul class="lista-metas" id="lista-metas"></ul>
+      <p class="vazio" id="vazio-metas">Crie uma meta, como reserva de emergência ou viagem.</p>
+      <button class="botao botao-secundario largura-total" id="botao-nova-meta">Nova meta</button>
+    </section>
+
+    <section class="tela" id="tela-ajustes">
+      <div class="secao-ajuste">
+        <div class="secao-ajuste-topo"><h2>Instituições</h2><button class="botao-link" id="botao-nova-instituicao">Adicionar</button></div>
+        <p class="ajuda">Bancos, carteiras digitais e dinheiro. Se tiver cartão de crédito, informe fechamento e vencimento.</p>
+        <ul class="lista" id="lista-instituicoes"></ul>
+      </div>
+      <div class="secao-ajuste">
+        <div class="secao-ajuste-topo"><h2>Contas fixas</h2><button class="botao-link" id="botao-nova-fixa">Adicionar</button></div>
+        <p class="ajuda">Aluguel, internet, salário... Entram sozinhas todo mês para você só marcar quando pagar.</p>
+        <ul class="lista" id="lista-fixas"></ul>
+      </div>
+      <div class="secao-ajuste">
+        <div class="secao-ajuste-topo"><h2>Categorias e limites</h2><button class="botao-link" id="botao-nova-categoria">Adicionar</button></div>
+        <ul class="lista" id="lista-categorias"></ul>
+      </div>
+      <div class="secao-ajuste">
+        <h2>Backup</h2>
+        <p class="ajuda">Os dados ficam só neste celular. Exporte um backup de vez em quando e guarde no Drive ou no e-mail.</p>
+        <div class="linha-botoes">
+          <button class="botao botao-secundario" id="botao-exportar">Exportar backup</button>
+          <button class="botao botao-secundario" id="botao-importar">Importar backup</button>
+        </div>
+        <input type="file" id="arquivo-importar" accept="application/json,.json" hidden>
+      </div>
+    </section>
+  </main>
+
+  <button class="botao-novo" id="botao-novo-lancamento" aria-label="Novo lançamento">+</button>
+
+  <nav class="abas">
+    <button class="aba" data-tela="inicio"><span class="aba-icone">◉</span>Início</button>
+    <button class="aba" data-tela="lancamentos"><span class="aba-icone">☰</span>Lançamentos</button>
+    <button class="aba" data-tela="graficos"><span class="aba-icone">◔</span>Gráficos</button>
+    <button class="aba" data-tela="metas"><span class="aba-icone">⚑</span>Metas</button>
+    <button class="aba" data-tela="ajustes"><span class="aba-icone">⚙</span>Ajustes</button>
+  </nav>
+
+  <dialog id="dialogo-lancamento">
+    <form method="dialog" id="form-lancamento">
+      <div class="segmentado">
+        <label><input type="radio" name="tipo" value="despesa" checked><span>Saída</span></label>
+        <label><input type="radio" name="tipo" value="receita"><span>Entrada</span></label>
+      </div>
+      <label class="campo campo-valor">
+        <span class="rotulo">Valor</span>
+        <input name="valor" inputmode="decimal" pattern="[0-9.,]+" placeholder="R$ 0,00" required autocomplete="off">
+      </label>
+      <label class="campo">O que foi
+        <input name="descricao" maxlength="60" placeholder="Ex.: Mercado" required>
+      </label>
+      <fieldset class="campo">
+        <legend>Categoria</legend>
+        <div class="chips" data-chips="categoriaId"></div>
+      </fieldset>
+      <fieldset class="campo">
+        <legend data-rotulo-instituicao>Pagou com</legend>
+        <div class="chips" data-chips="pagamento"></div>
+      </fieldset>
+      <label class="campo" data-somente-credito>Em quantas vezes
+        <input type="number" name="parcelas" min="1" max="48" value="1" inputmode="numeric">
+      </label>
+      <div class="linha-campos">
+        <label class="campo">Data
+          <input type="date" name="data" required>
+        </label>
+        <label class="campo-check" data-sem-credito>
+          <input type="checkbox" name="pago" checked><span data-rotulo-pago>Já pago</span>
+        </label>
+      </div>
+      <div class="acoes-dialogo">
+        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-instituicao">
+    <form method="dialog" id="form-instituicao">
+      <h3 data-titulo>Nova instituição</h3>
+      <label class="campo">Nome
+        <input name="nome" maxlength="30" list="sugestoes-instituicoes" placeholder="Ex.: Nubank" required autocomplete="off">
+      </label>
+      <datalist id="sugestoes-instituicoes"></datalist>
+      <label class="campo">Saldo na conta hoje (R$)
+        <input name="saldoInicial" inputmode="decimal" pattern="-?[0-9.,]*" placeholder="0,00" autocomplete="off">
+      </label>
+      <label class="campo-check">
+        <input type="checkbox" name="temCartao"><span>Tem cartão de crédito</span>
+      </label>
+      <div class="linha-campos" data-somente-cartao>
+        <label class="campo">Fecha dia
+          <input type="number" name="diaFechamento" min="1" max="31" inputmode="numeric">
+        </label>
+        <label class="campo">Vence dia
+          <input type="number" name="diaVencimento" min="1" max="31" inputmode="numeric">
+        </label>
+      </div>
+      <label class="campo">Cor
+        <input type="color" name="cor" value="#0f766e">
+      </label>
+      <div class="acoes-dialogo">
+        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-fixa">
+    <form method="dialog" id="form-fixa">
+      <h3 data-titulo>Nova conta fixa</h3>
+      <div class="segmentado">
+        <label><input type="radio" name="tipo" value="despesa" checked><span>Saída</span></label>
+        <label><input type="radio" name="tipo" value="receita"><span>Entrada</span></label>
+      </div>
+      <label class="campo">O que é
+        <input name="descricao" maxlength="60" placeholder="Ex.: Aluguel" required>
+      </label>
+      <div class="linha-campos">
+        <label class="campo">Valor (R$)
+          <input name="valor" inputmode="decimal" pattern="[0-9.,]+" placeholder="0,00" required autocomplete="off">
+        </label>
+        <label class="campo">Todo dia
+          <input type="number" name="dia" min="1" max="31" inputmode="numeric" required>
+        </label>
+      </div>
+      <fieldset class="campo">
+        <legend>Categoria</legend>
+        <div class="chips" data-chips="categoriaId"></div>
+      </fieldset>
+      <fieldset class="campo">
+        <legend>Instituição</legend>
+        <div class="chips" data-chips="instituicaoId"></div>
+      </fieldset>
+      <div class="acoes-dialogo">
+        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-categoria">
+    <form method="dialog" id="form-categoria">
+      <h3 data-titulo>Nova categoria</h3>
+      <div class="segmentado">
+        <label><input type="radio" name="tipo" value="despesa" checked><span>Saída</span></label>
+        <label><input type="radio" name="tipo" value="receita"><span>Entrada</span></label>
+      </div>
+      <label class="campo">Nome
+        <input name="nome" maxlength="30" required>
+      </label>
+      <label class="campo" data-somente-despesa>Limite por mês (R$, opcional)
+        <input name="limite" inputmode="decimal" pattern="[0-9.,]*" placeholder="Sem limite" autocomplete="off">
+      </label>
+      <label class="campo">Cor
+        <input type="color" name="cor" value="#0f766e">
+      </label>
+      <div class="acoes-dialogo">
+        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-meta">
+    <form method="dialog" id="form-meta">
+      <h3 data-titulo>Nova meta</h3>
+      <label class="campo">Nome
+        <input name="nome" maxlength="40" placeholder="Ex.: Reserva de emergência" required>
+      </label>
+      <div class="linha-campos">
+        <label class="campo">Quero juntar (R$)
+          <input name="alvo" inputmode="decimal" pattern="[0-9.,]+" required autocomplete="off">
+        </label>
+        <label class="campo">Já tenho (R$)
+          <input name="guardado" inputmode="decimal" pattern="[0-9.,]*" placeholder="0,00" autocomplete="off">
+        </label>
+      </div>
+      <label class="campo">Até quando (opcional)
+        <input type="month" name="prazo">
+      </label>
+      <div class="acoes-dialogo">
+        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-aporte">
+    <form method="dialog" id="form-aporte">
+      <h3 data-titulo>Movimentar meta</h3>
+      <div class="segmentado">
+        <label><input type="radio" name="operacao" value="guardar" checked><span>Guardar</span></label>
+        <label><input type="radio" name="operacao" value="retirar"><span>Retirar</span></label>
+      </div>
+      <label class="campo campo-valor">
+        <span class="rotulo">Valor</span>
+        <input name="valor" inputmode="decimal" pattern="[0-9.,]+" placeholder="R$ 0,00" required autocomplete="off">
+      </label>
+      <div class="acoes-dialogo">
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="modelo-chip">
+    <label class="chip">
+      <input type="radio">
+      <span class="marcador"></span>
+      <span data-campo="nome"></span>
+    </label>
+  </template>
+
+  <template id="modelo-saldo-instituicao">
+    <button class="cartao-instituicao">
+      <span class="cartao-instituicao-nome"><span class="marcador"></span><span data-campo="nome"></span></span>
+      <strong data-campo="saldo"></strong>
+      <small data-campo="detalhe"></small>
+    </button>
+  </template>
+
+  <template id="modelo-cabecalho-dia">
+    <li class="cabecalho-dia" data-campo="dia"></li>
+  </template>
+
+  <template id="modelo-item">
+    <li class="item" tabindex="0">
+      <span class="marcador"></span>
+      <div class="item-texto">
+        <strong data-campo="titulo"></strong>
+        <small data-campo="detalhe"></small>
+      </div>
+      <span class="item-valor" data-campo="valor"></span>
+    </li>
+  </template>
+
+  <template id="modelo-conta-do-mes">
+    <li class="item">
+      <button class="marcar-pago" aria-label="Marcar como pago"></button>
+      <div class="item-texto">
+        <strong data-campo="titulo"></strong>
+        <small data-campo="detalhe"></small>
+      </div>
+      <span class="item-valor" data-campo="valor"></span>
+    </li>
+  </template>
+
+  <template id="modelo-orcamento">
+    <li class="orcamento">
+      <div class="orcamento-linha">
+        <span data-campo="nome"></span>
+        <span data-campo="valores"></span>
+      </div>
+      <div class="barra"><span class="barra-preenchida"></span></div>
+    </li>
+  </template>
+
+  <template id="modelo-legenda">
+    <li>
+      <span class="marcador"></span>
+      <span class="legenda-nome" data-campo="nome"></span>
+      <span data-campo="valor"></span>
+    </li>
+  </template>
+
+  <template id="modelo-barra-mes">
+    <div class="barra-mes">
+      <div class="barra-mes-colunas">
+        <span class="coluna coluna-receita"></span>
+        <span class="coluna coluna-despesa"></span>
+      </div>
+      <small data-campo="mes"></small>
+    </div>
+  </template>
+
+  <template id="modelo-meta">
+    <li class="meta">
+      <div class="orcamento-linha">
+        <strong data-campo="nome"></strong>
+        <span data-campo="percentual"></span>
+      </div>
+      <div class="barra"><span class="barra-preenchida"></span></div>
+      <span class="meta-valores" data-campo="valores"></span>
+      <small class="meta-dica" data-campo="dica"></small>
+      <div class="linha-botoes">
+        <button class="botao" data-acao="movimentar">Movimentar</button>
+        <button class="botao botao-secundario" data-acao="editar">Editar</button>
+      </div>
+    </li>
+  </template>
+</body>
+</html>
