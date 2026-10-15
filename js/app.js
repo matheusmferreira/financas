@@ -571,9 +571,11 @@ function renderizarInstituicao() {
     });
   }
 
+  const meses = Array.from({ length: 6 }, (_, indice) => somarMeses(mesVisivel, indice - 5));
+  montarGraficoGuardado($('#guardado-instituicao'), [instituicao, ...caixinhas].filter((conta) => conta.percentualCdi), meses);
+
   const barras = $('#inst-barras');
   barras.replaceChildren();
-  const meses = Array.from({ length: 6 }, (_, indice) => somarMeses(mesVisivel, indice - 5));
   const resumos = meses.map((mes) => resumoDaInstituicaoNoMes(estado, instituicao.id, mes));
   const maior = Math.max(1, ...resumos.flatMap((r) => [r.entradas, r.gastos]));
   meses.forEach((mes, indice) => {
@@ -644,26 +646,29 @@ function renderizarGraficos() {
     barras.append(barra);
   });
 
-  renderizarGuardado(meses);
+  const contas = contasQueRendem(estado);
+  montarGraficoGuardado($('#guardado-geral'), contas, meses);
+  $('#vazio-guardado').hidden = contas.length > 0;
 }
 
-function renderizarGuardado(meses) {
-  const temCofrinho = estado.caixinhas.length > 0 || estado.instituicoes.some((instituicao) => instituicao.percentualCdi);
-  $('#secao-guardado').hidden = !temCofrinho;
-  if (!temCofrinho) return;
-
+// Gráfico "dinheiro guardado" (depositado + rendimento no fim de cada mês). Usado em Gráficos, com todas as contas que
+// rendem, e na tela de cada banco, só com as dele; sem contas, o container fica vazio.
+function montarGraficoGuardado(container, contas, meses) {
+  container.replaceChildren();
+  if (contas.length === 0) return;
   const hoje = hojeISO();
-  const posicoes = meses.map((mes) => guardadoNoFimDoMes(estado, mes, hoje));
+  const posicoes = meses.map((mes) => guardadoNoFimDoMes(estado, mes, hoje, contas));
   const atual = posicoes.at(-1);
-  $('#guardado-total').textContent = formatarMoeda(atual.depositado + atual.rendimento);
-  $('#guardado-rendeu-total').textContent = formatarMoeda(atual.rendimento);
-  // Mesma conta da tela da instituição, para os dois "Rendeu no mês" sempre baterem.
-  $('#guardado-rendeu-mes').textContent = formatarMoeda(rendeuNoMes(estado, contasQueRendem(estado), mesVisivel, hoje));
-
-  const barras = $('#barras-guardado');
-  const detalhe = $('#detalhe-guardado');
-  barras.replaceChildren();
-  detalhe.textContent = estado.cdiAnual ? 'Toque numa barra para ver os valores.' : 'Informe o CDI em Ajustes para ver o rendimento.';
+  const bloco = clonarModelo('modelo-bloco-guardado');
+  preencher(bloco, {
+    total: formatarMoeda(atual.depositado + atual.rendimento),
+    rendeuTotal: formatarMoeda(atual.rendimento),
+    // Mesma conta da tela da instituição, para os dois "Rendeu no mês" sempre baterem.
+    rendeuMes: formatarMoeda(rendeuNoMes(estado, contas, mesVisivel, hoje)),
+    detalhe: estado.cdiAnual ? 'Toque numa barra para ver os valores.' : 'Informe o CDI em Ajustes para ver o rendimento.',
+  });
+  const barras = bloco.querySelector('[data-barras]');
+  const detalhe = bloco.querySelector('[data-campo="detalhe"]');
   const maior = Math.max(1, ...posicoes.map((posicao) => posicao.depositado + posicao.rendimento));
   meses.forEach((mes, indice) => {
     const { depositado, rendimento } = posicoes[indice];
@@ -687,6 +692,7 @@ function renderizarGuardado(meses) {
     });
     barras.append(barra);
   });
+  container.append(bloco);
 }
 
 function renderizarMetas() {

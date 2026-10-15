@@ -216,11 +216,12 @@ function limiteDoMes(mes, hoje) {
 }
 
 // Quanto estava guardado no fim do mês: o que foi depositado (líquido de resgates) e o rendimento acumulado até ali.
-export function guardadoNoFimDoMes(estado, mes, hoje) {
+// contas: todas as que rendem (Gráficos) ou só as de uma instituição (tela dela).
+export function guardadoNoFimDoMes(estado, mes, hoje, contas = contasQueRendem(estado)) {
   const fimDoMes = limiteDoMes(mes, hoje);
   let depositado = 0;
   let rendimento = 0;
-  for (const conta of contasQueRendem(estado)) {
+  for (const conta of contas) {
     const movimentos = movimentosQueRendem(estado, conta).filter((movimento) => movimento.data <= fimDoMes);
     depositado += movimentos.reduce((soma, movimento) => soma + movimento.valor, 0);
     rendimento += rendimentoDosMovimentos(estado, conta, movimentos, fimDoMes);

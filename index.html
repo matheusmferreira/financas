@@ -87,6 +87,7 @@
         <button class="botao" id="botao-guardar">Guardar</button>
         <button class="botao botao-secundario" id="botao-resgatar">Resgatar</button>
       </div>
+      <div id="guardado-instituicao"></div>
 
       <div id="inst-secao-cartao">
         <h2>Cartão de crédito</h2>
@@ -136,20 +137,9 @@
       </div>
       <div class="barras-meses" id="barras-meses"></div>
 
-      <div id="secao-guardado" hidden>
-        <h2>Dinheiro guardado</h2>
-        <div class="numeros-guardado">
-          <div><span class="rotulo">Guardado</span><strong id="guardado-total"></strong></div>
-          <div><span class="rotulo">Rendeu no total</span><strong id="guardado-rendeu-total"></strong></div>
-          <div><span class="rotulo">Rendeu no mês</span><strong id="guardado-rendeu-mes"></strong></div>
-        </div>
-        <div class="legenda-barras">
-          <span><span class="marcador marcador-depositado"></span>Depositado</span>
-          <span><span class="marcador marcador-rendimento"></span>Rendimento</span>
-        </div>
-        <div class="barras-meses" id="barras-guardado"></div>
-        <p class="detalhe-barra" id="detalhe-guardado">Toque numa barra para ver os valores.</p>
-      </div>
+      <h2>Dinheiro guardado nas caixinhas</h2>
+      <div id="guardado-geral"></div>
+      <p class="vazio" id="vazio-guardado">Nenhuma caixinha ainda. No Início, toque no seu banco → Caixinhas → Adicionar. Se você criou caixinhas como instituição, edite cada uma em Ajustes e escolha "Na verdade é uma caixinha de…".</p>
     </section>
 
     <section class="tela" id="tela-metas">
@@ -518,6 +508,22 @@
         <span class="coluna coluna-despesa"></span>
       </div>
       <small data-campo="mes"></small>
+    </div>
+  </template>
+
+  <template id="modelo-bloco-guardado">
+    <div class="bloco-guardado">
+      <div class="numeros-guardado">
+        <div><span class="rotulo">Guardado</span><strong data-campo="total"></strong></div>
+        <div><span class="rotulo">Rendeu no total</span><strong data-campo="rendeuTotal"></strong></div>
+        <div><span class="rotulo">Rendeu no mês</span><strong data-campo="rendeuMes"></strong></div>
+      </div>
+      <div class="legenda-barras">
+        <span><span class="marcador marcador-depositado"></span>Depositado</span>
+        <span><span class="marcador marcador-rendimento"></span>Rendimento</span>
+      </div>
+      <div class="barras-meses" data-barras></div>
+      <p class="detalhe-barra" data-campo="detalhe"></p>
     </div>
   </template>
 

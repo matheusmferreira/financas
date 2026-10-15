@@ -552,6 +552,7 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 .barra-guardado.selecionada small { color: var(--texto); font-weight: 700; }
 
 .detalhe-barra { margin: 10px 0 0; font-size: 0.85rem; color: var(--texto-suave); text-align: center; }
+#guardado-instituicao .bloco-guardado { margin-top: 16px; }
 
 /* ---------- Ajustes ---------- */
 
