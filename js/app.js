@@ -1,7 +1,7 @@
 import {
   formatarMoeda, centavosParaTexto, lerValorEmCentavos, hojeISO, mesDe, somarMeses, dataNoMes, nomeDoMes, nomeDoDia,
   gerarParcelasDoCartao, chaveFatura, lancamentosDoMes, totalDaFatura, resumoDoMes, saldoDaInstituicao,
-  gastosPorCategoria, lancamentosDasFixas, valorMensalParaMeta, rendimentoDaInstituicao,
+  gastosPorCategoria, lancamentosDasFixas, valorMensalParaMeta, rendimentoDaInstituicao, guardadoNoFimDoMes,
 } from './calculos.js';
 
 const CHAVE_ARMAZENAMENTO = 'controle-financeiro:v1';
@@ -155,8 +155,22 @@ function abrirDialogo(idDialogo, { titulo, editando }) {
 
 // ---------- Navegação ----------
 
+// Aba e mês ficam no endereço (#graficos/2026-11) para recarregar sem voltar ao Início.
+// Abrir pelo ícone usa o endereço sem # e começa no Início do mês atual.
+const TELAS = ['inicio', 'lancamentos', 'graficos', 'metas', 'ajustes'];
+
+function guardarNoEndereco() {
+  history.replaceState(null, '', `#${document.body.dataset.tela}/${mesVisivel}`);
+}
+
+function lerDoEndereco() {
+  const [tela, mes] = location.hash.slice(1).split('/');
+  return { tela: TELAS.includes(tela) ? tela : 'inicio', mes: /^\d{4}-\d{2}$/.test(mes ?? '') ? mes : null };
+}
+
 function trocarTela(nomeTela) {
   document.body.dataset.tela = nomeTela;
+  guardarNoEndereco();
   for (const tela of document.querySelectorAll('.tela')) tela.classList.toggle('ativa', tela.id === `tela-${nomeTela}`);
   for (const aba of document.querySelectorAll('.aba')) aba.classList.toggle('ativa', aba.dataset.tela === nomeTela);
   atualizarTitulo();
@@ -170,6 +184,7 @@ function atualizarTitulo() {
 
 function trocarMes(quantidade) {
   mesVisivel = somarMeses(mesVisivel, quantidade);
+  guardarNoEndereco();
   renderizarTudo();
 }
 
@@ -396,6 +411,50 @@ function renderizarGraficos() {
     barra.querySelector('.coluna-despesa').style.setProperty('--altura', `${(resumos[indice].despesas / maior) * 100}%`);
     preencher(barra, { mes: nomeDoMes(mes, { curto: true }) });
     barra.classList.toggle('atual', mes === mesVisivel);
+    barras.append(barra);
+  });
+
+  renderizarGuardado(meses);
+}
+
+function renderizarGuardado(meses) {
+  const temCofrinho = estado.instituicoes.some((instituicao) => instituicao.percentualCdi);
+  $('#secao-guardado').hidden = !temCofrinho;
+  if (!temCofrinho) return;
+
+  const hoje = hojeISO();
+  const posicoes = meses.map((mes) => guardadoNoFimDoMes(estado, mes, hoje));
+  const atual = posicoes.at(-1);
+  const anterior = guardadoNoFimDoMes(estado, somarMeses(mesVisivel, -1), hoje);
+  $('#guardado-total').textContent = formatarMoeda(atual.depositado + atual.rendimento);
+  $('#guardado-rendeu-total').textContent = formatarMoeda(atual.rendimento);
+  $('#guardado-rendeu-mes').textContent = formatarMoeda(atual.rendimento - anterior.rendimento);
+
+  const barras = $('#barras-guardado');
+  const detalhe = $('#detalhe-guardado');
+  barras.replaceChildren();
+  detalhe.textContent = estado.cdiAnual ? 'Toque numa barra para ver os valores.' : 'Informe o CDI em Ajustes para ver o rendimento.';
+  const maior = Math.max(1, ...posicoes.map((posicao) => posicao.depositado + posicao.rendimento));
+  meses.forEach((mes, indice) => {
+    const { depositado, rendimento } = posicoes[indice];
+    const total = Math.max(0, depositado + rendimento);
+    const previsao = mes > mesDe(hoje);
+    const barra = clonarModelo('modelo-barra-guardado');
+    barra.querySelector('.pilha').style.setProperty('--altura', `${(total / maior) * 100}%`);
+    const segmentoDepositado = barra.querySelector('.segmento-depositado');
+    const segmentoRendimento = barra.querySelector('.segmento-rendimento');
+    segmentoDepositado.style.setProperty('--parte', Math.max(0, depositado));
+    segmentoRendimento.style.setProperty('--parte', Math.max(0, rendimento));
+    segmentoRendimento.hidden = rendimento <= 0;
+    segmentoDepositado.hidden = depositado <= 0;
+    preencher(barra, { mes: nomeDoMes(mes, { curto: true }) });
+    barra.classList.toggle('previsao', previsao);
+    barra.setAttribute('aria-label', `${nomeDoMes(mes)}: ${formatarMoeda(total)}`);
+    barra.addEventListener('click', () => {
+      for (const outra of barras.children) outra.classList.toggle('selecionada', outra === barra);
+      detalhe.textContent = `${nomeDoMes(mes)}${previsao ? ' (previsão)' : ''}: ${formatarMoeda(depositado)} depositado + `
+        + `${formatarMoeda(rendimento)} de rendimento = ${formatarMoeda(depositado + rendimento)}`;
+    });
     barras.append(barra);
   });
 }
@@ -999,5 +1058,7 @@ navigator.storage?.persist?.();
 // O modo offline só existe na versão publicada; o HTML único aberto como arquivo não tem sw.js ao lado.
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');
 
-trocarTela('inicio');
+const enderecoInicial = lerDoEndereco();
+if (enderecoInicial.mes) mesVisivel = enderecoInicial.mes;
+trocarTela(enderecoInicial.tela);
 renderizarTudo();

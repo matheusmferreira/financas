@@ -16,7 +16,8 @@ Cada pessoa que instala tem os próprios dados, separados — o mesmo endereço 
 - **Atualização automática**: com internet o app sempre abre a versão publicada; voltando depois de 10+ minutos em segundo plano ele recarrega sozinho (não recarrega com formulário aberto).
 - **Cartão de crédito**: a compra cai no mês da fatura (comprou no dia do fechamento ou depois → próxima fatura) e já é dividida nas parcelas (1/10, 2/10...). A fatura aparece em "Contas do mês" para marcar como paga; ao marcar, sai do saldo da instituição.
 - **Contas fixas**: aluguel, internet, salário... entram sozinhas todo mês como pendentes.
-- **Gráficos**: gastos por categoria no mês e entradas × saídas dos últimos 6 meses.
+- **Gráficos**: gastos por categoria no mês, entradas × saídas dos últimos 6 meses e **dinheiro guardado** (depositado + rendimento no fim de cada mês; mês atual até hoje, meses futuros como previsão; tocar na barra mostra os valores).
+- **Recarregar mantém a tela**: aba e mês ficam no endereço (`#graficos/2026-11`); abrir pelo ícone começa no Início do mês atual.
 - **Metas**: valor alvo, quanto já tem e prazo; o app calcula quanto guardar por mês.
 - **Backup**: exportar/importar um arquivo `.json` (em Ajustes).
 

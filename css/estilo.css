@@ -12,6 +12,8 @@
   --alerta: #d68400;
   --receita: #10b981;
   --despesa: #f43f5e;
+  --depositado: #0d9488;
+  --rendimento: #d97706;
   --sombra: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 16px rgb(0 0 0 / 6%);
   --raio: 16px;
   --altura-abas: 64px;
@@ -400,6 +402,40 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 .coluna { width: 40%; max-width: 14px; height: var(--altura, 0%); min-height: 2px; border-radius: 4px 4px 0 0; }
 .coluna-receita { background: var(--receita); }
 .coluna-despesa { background: var(--despesa); }
+
+/* Cofrinho: par validado (teal + âmbar) nos temas claro e escuro, com legenda e valores ao tocar. */
+.numeros-guardado {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.numeros-guardado div { display: flex; flex-direction: column; }
+.numeros-guardado strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.marcador-depositado { --cor: var(--depositado); }
+.marcador-rendimento { --cor: var(--rendimento); }
+
+.barra-guardado { border: none; background: none; padding: 0; color: inherit; }
+
+.pilha {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 50%;
+  max-width: 22px;
+  height: var(--altura, 0%);
+}
+
+.segmento { display: block; flex: var(--parte, 0) 1 0; min-height: 0; }
+.segmento-rendimento { background: var(--rendimento); border-radius: 4px 4px 0 0; }
+.segmento-depositado { background: var(--depositado); }
+/* Sem rendimento (CDI não informado), o depositado fica no topo e leva o canto arredondado. */
+.segmento-rendimento[hidden] + .segmento-depositado { border-radius: 4px 4px 0 0; }
+.barra-guardado.previsao .segmento { opacity: 0.45; }
+.barra-guardado.selecionada small { color: var(--texto); font-weight: 700; }
+
+.detalhe-barra { margin: 10px 0 0; font-size: 0.85rem; color: var(--texto-suave); text-align: center; }
 
 /* ---------- Ajustes ---------- */
 

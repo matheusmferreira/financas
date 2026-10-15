@@ -164,16 +164,39 @@ export function diasCorridosEntre(dataInicialISO, dataFinalISO) {
 // convertidos para 252/365, porque contar só seg–sex sem feriados dá 260 dias/ano e superestima ~3%.
 // O saldo informado no cadastro rende a partir de quando o rendimento foi ligado (rendeDesde);
 // cada lançamento rende desde a própria data, para depósitos antigos registrados depois também renderem.
-export function rendimentoDaInstituicao(estado, instituicao, hoje) {
-  if (!instituicao.percentualCdi || !estado.cdiAnual) return 0;
+function movimentosQueRendem(estado, instituicao) {
+  return [{ data: instituicao.rendeDesde, valor: instituicao.saldoInicial }, ...movimentosDaInstituicao(estado, instituicao)];
+}
+
+function rendimentoDosMovimentos(estado, instituicao, movimentos, ate) {
+  if (!estado.cdiAnual) return 0;
   const taxaDiaria = ((1 + estado.cdiAnual / 100) ** (1 / 252) - 1) * (instituicao.percentualCdi / 100);
-  const movimentos = [{ data: instituicao.rendeDesde, valor: instituicao.saldoInicial }, ...movimentosDaInstituicao(estado, instituicao)];
   let rendimento = 0;
   for (const { data, valor } of movimentos) {
-    const diasUteisEquivalentes = (diasCorridosEntre(data, hoje) * 252) / 365;
+    const diasUteisEquivalentes = (diasCorridosEntre(data, ate) * 252) / 365;
     rendimento += valor * ((1 + taxaDiaria) ** diasUteisEquivalentes - 1);
   }
   return Math.round(rendimento);
+}
+
+export function rendimentoDaInstituicao(estado, instituicao, hoje) {
+  if (!instituicao.percentualCdi) return 0;
+  return rendimentoDosMovimentos(estado, instituicao, movimentosQueRendem(estado, instituicao), hoje);
+}
+
+// Quanto estava guardado nas instituições que rendem no último dia do mês: o que foi depositado (líquido de resgates)
+// e o rendimento acumulado até ali. Mês futuro vira previsão: lançamentos já agendados + rendimento até o fim dele.
+// O mês atual para em hoje, para bater com o saldo mostrado no Início.
+export function guardadoNoFimDoMes(estado, mes, hoje) {
+  const fimDoMes = mes === mesDe(hoje) ? hoje : dataNoMes(mes, 31);
+  let depositado = 0;
+  let rendimento = 0;
+  for (const instituicao of estado.instituicoes.filter((i) => i.percentualCdi)) {
+    const movimentos = movimentosQueRendem(estado, instituicao).filter((movimento) => movimento.data <= fimDoMes);
+    depositado += movimentos.reduce((soma, movimento) => soma + movimento.valor, 0);
+    rendimento += rendimentoDosMovimentos(estado, instituicao, movimentos, fimDoMes);
+  }
+  return { depositado, rendimento };
 }
 
 export function gastosPorCategoria(lancamentos, mes) {

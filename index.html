@@ -81,6 +81,21 @@
         <span><span class="marcador marcador-despesa"></span>Saiu</span>
       </div>
       <div class="barras-meses" id="barras-meses"></div>
+
+      <div id="secao-guardado" hidden>
+        <h2>Dinheiro guardado</h2>
+        <div class="numeros-guardado">
+          <div><span class="rotulo">Guardado</span><strong id="guardado-total"></strong></div>
+          <div><span class="rotulo">Rendeu no total</span><strong id="guardado-rendeu-total"></strong></div>
+          <div><span class="rotulo">Rendeu no mês</span><strong id="guardado-rendeu-mes"></strong></div>
+        </div>
+        <div class="legenda-barras">
+          <span><span class="marcador marcador-depositado"></span>Depositado</span>
+          <span><span class="marcador marcador-rendimento"></span>Rendimento</span>
+        </div>
+        <div class="barras-meses" id="barras-guardado"></div>
+        <p class="detalhe-barra" id="detalhe-guardado">Toque numa barra para ver os valores.</p>
+      </div>
     </section>
 
     <section class="tela" id="tela-metas">
@@ -399,6 +414,18 @@
       </div>
       <small data-campo="mes"></small>
     </div>
+  </template>
+
+  <template id="modelo-barra-guardado">
+    <button class="barra-mes barra-guardado">
+      <span class="barra-mes-colunas">
+        <span class="pilha">
+          <span class="segmento segmento-rendimento"></span>
+          <span class="segmento segmento-depositado"></span>
+        </span>
+      </span>
+      <small data-campo="mes"></small>
+    </button>
   </template>
 
   <template id="modelo-meta">
