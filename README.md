@@ -58,9 +58,9 @@ O site publicado não contém nenhum dado seu — os lançamentos ficam só no c
 
 ## Atualizar depois de mudar o código
 
-1. Aumente `VERSAO` em `sw.js` (ex.: `financas-v2`), senão o celular continua com os arquivos antigos.
-2. Faça commit e `git push` na `main` (o Pages atualiza em ~1 minuto).
-3. No celular, feche e abra o app duas vezes.
+1. Aumente `VERSAO` em `sw.js` (ex.: `financas-v4`) quando mudar a lista de arquivos, para limpar a cópia antiga.
+2. Faça commit e `git push` na `main` (o Pages atualiza em ~1 minuto; o GitHub guarda cache por até 10 minutos).
+3. No celular, basta abrir o app com internet: o `sw.js` busca a rede primeiro e só usa a cópia offline sem conexão.
 
 ## Cuidados
 
