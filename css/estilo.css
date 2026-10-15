@@ -94,7 +94,6 @@ h2 {
   box-shadow: var(--sombra);
 }
 
-body[data-tela="metas"] .navegacao-mes,
 body[data-tela="ajustes"] .navegacao-mes { visibility: hidden; }
 
 main {
@@ -111,7 +110,7 @@ main {
   inset: auto 0 0 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   height: calc(var(--altura-abas) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--superficie);
@@ -150,7 +149,6 @@ main {
 }
 
 body[data-tela="graficos"] .botao-novo,
-body[data-tela="metas"] .botao-novo,
 body[data-tela="ajustes"] .botao-novo { display: none; }
 
 /* ---------- Início ---------- */
@@ -408,7 +406,7 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 .item.pago .marcar-pago::after { content: "✓"; color: var(--superficie); font-weight: 800; font-size: 0.9rem; }
 .item.pago .item-texto strong, .item.pago .item-valor { color: var(--texto-suave); text-decoration: line-through; }
 
-/* ---------- Orçamento e metas ---------- */
+/* ---------- Orçamento e meta das caixinhas ---------- */
 
 .orcamento { padding: 12px 14px; border-bottom: 1px solid var(--borda); }
 .orcamento:last-child { border-bottom: none; }
@@ -431,22 +429,20 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 .orcamento.estourado .barra-preenchida { background: var(--negativo); }
 .orcamento.estourado .orcamento-linha span:last-child { color: var(--negativo); font-weight: 650; }
 
-.lista-metas { display: flex; flex-direction: column; gap: 12px; margin: 0 0 16px; padding: 0; list-style: none; }
+.item-caixinha .barra-meta { margin: 8px 0 4px; }
+.item-caixinha .barra-meta .barra-preenchida { background: var(--rendimento); }
+.item-caixinha .texto-meta { white-space: normal; }
+.item-caixinha .texto-meta:empty { display: none; }
 
-.meta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px;
+.aviso-metas {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--primaria);
   border-radius: var(--raio);
-  background: var(--superficie);
-  box-shadow: var(--sombra);
+  font-size: 0.9rem;
 }
 
-.meta .barra { height: 10px; }
-.meta-valores { font-weight: 650; font-variant-numeric: tabular-nums; }
-.meta-dica { color: var(--texto-suave); }
-.meta .linha-botoes { margin-top: 6px; }
+.aviso-metas p { margin: 0 0 10px; }
 
 /* ---------- Lançamentos ---------- */
 

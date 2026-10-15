@@ -22,7 +22,7 @@ Cada pessoa que instala tem os próprios dados, separados — o mesmo endereço 
 - **Contas fixas**: aluguel, internet, salário... entram sozinhas todo mês como pendentes.
 - **Gráficos**: gastos por categoria no mês, entradas × saídas dos últimos 6 meses e **dinheiro guardado** (depositado + rendimento no fim de cada mês; mês atual até hoje, meses futuros como previsão; tocar na barra mostra os valores).
 - **Recarregar mantém a tela**: aba e mês ficam no endereço (`#graficos/2026-11`); abrir pelo ícone começa no Início do mês atual.
-- **Metas**: valor alvo, quanto já tem e prazo; o app calcula quanto guardar por mês.
+- **Meta na caixinha** (opcional, ao criar/editar a caixinha): "quero juntar R$ X até tal mês"; barra de progresso e "guarde R$ X por mês" calculados com o dinheiro que está de fato na caixinha (com rendimento). A antiga aba Metas saiu (4 abas); metas antigas geram um aviso no Início para recriar na caixinha.
 - **Backup**: exportar/importar um arquivo `.json` (em Ajustes).
 
 ## Estrutura

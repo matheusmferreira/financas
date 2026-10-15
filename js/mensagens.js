@@ -94,6 +94,11 @@ const TEXTOS = {
     dica_reserva: ['Sua reserva cobre {meses} meses de gastos. O ideal é de 3 a 6. Se perder o emprego amanhã, tá fudido.'],
     dica_sem_limites: ['Coloca limite nas categorias (Ajustes) que eu te dedo quando estiver exagerando.'],
 
+    meta_atingida: ['Meta batida, caralho! Agora não vai torrar tudo de uma vez.'],
+    meta_mensal: ['Guarde {valor} por mês até {prazo} ou esquece essa porra.'],
+    meta_faltam: ['Faltam {valor}. Bora encher essa caixinha.'],
+    aviso_metas_antigas: ['A aba Metas foi pro saco: agora a meta fica dentro da caixinha. Recria {nomes} lá (toca no banco → caixinha → Meta).'],
+
     vazio_lancamentos: ['Nada lançado. Ou você é muito econômico ou tá escondendo coisa. Toca no + aí.'],
     vazio_contas: ['Nenhuma conta fixa nem fatura neste mês. Milagre ou esquecimento?'],
   },
@@ -140,6 +145,11 @@ const TEXTOS = {
     dica_meta_guardar: ['Faltam {valor} para a meta de guardar deste mês. Guardar assim que o salário cai evita gastar antes.'],
     dica_reserva: ['Seu dinheiro guardado cobre {meses} meses dos seus gastos. O recomendado é ter de 3 a 6 meses de reserva.'],
     dica_sem_limites: ['Coloque limite nas categorias em que você mais gasta (Ajustes). O app avisa quando estiver chegando perto.'],
+
+    meta_atingida: ['Meta atingida!'],
+    meta_mensal: ['Guarde {valor} por mês até {prazo}.'],
+    meta_faltam: ['Faltam {valor} para a meta.'],
+    aviso_metas_antigas: ['A aba Metas saiu: agora a meta fica dentro da caixinha. Recrie {nomes} numa caixinha (toque no banco → caixinha → Meta).'],
 
     vazio_lancamentos: ['Nada lançado neste mês. Toque no + para começar.'],
     vazio_contas: ['Nenhuma conta fixa ou fatura de cartão neste mês.'],

@@ -25,7 +25,7 @@ let estado = carregarEstado();
 let mesVisivel = mesDe(hojeISO());
 let filtroLancamentos = 'todos';
 let instituicaoAberta = null;
-const emEdicao = { lancamento: null, instituicao: null, caixinha: null, fixa: null, categoria: null, meta: null, aporte: null };
+const emEdicao = { lancamento: null, instituicao: null, caixinha: null, fixa: null, categoria: null };
 
 function estadoInicial() {
   const categoria = (nome, tipo, cor) => ({ id: criarId(), nome, tipo, cor, limite: 0 });
@@ -246,7 +246,7 @@ function abrirDialogo(idDialogo, { titulo, editando }) {
 
 // Aba, mês e instituição aberta ficam no endereço (#graficos/2026-11, #instituicao/2026-11/<id>)
 // para recarregar sem voltar ao Início. Abrir pelo ícone usa o endereço sem # e começa no Início do mês atual.
-const TELAS = ['inicio', 'lancamentos', 'graficos', 'metas', 'ajustes', 'instituicao'];
+const TELAS = ['inicio', 'lancamentos', 'graficos', 'ajustes', 'instituicao'];
 
 function guardarNoEndereco() {
   const tela = document.body.dataset.tela;
@@ -280,7 +280,7 @@ function abrirTelaInstituicao(instituicaoId) {
 }
 
 function atualizarTitulo() {
-  const titulos = { metas: 'Metas', ajustes: 'Ajustes' };
+  const titulos = { ajustes: 'Ajustes' };
   const tela = document.body.dataset.tela;
   const titulo = tela === 'instituicao' ? `${buscarInstituicao(instituicaoAberta)?.nome} · ${nomeDoMes(mesVisivel, { curto: true })}` : titulos[tela];
   $('#titulo-topo').textContent = titulo ?? nomeDoMes(mesVisivel);
@@ -312,7 +312,6 @@ function renderizarTudo() {
   renderizarInstituicao();
   renderizarLancamentos();
   renderizarGraficos();
-  renderizarMetas();
   renderizarAjustes();
 }
 
@@ -337,6 +336,12 @@ function renderizarInicio() {
   $('#resumo-guardar').textContent = `${formatarMoeda(Math.max(0, plano.guardado))} de ${formatarMoeda(plano.metaGuardar)}`;
   $('#resumo-total').textContent = formatarMoeda(estado.instituicoes.reduce((soma, i) => soma + totalDaInstituicao(estado, i, hoje), 0));
   $('#resumo-a-pagar').textContent = formatarMoeda(resumoDoMes(estado, mesVisivel).aPagar);
+
+  // Metas da antiga aba Metas não viram caixinha sozinhas (não eram dinheiro de verdade): avisa uma vez para recriar.
+  $('#aviso-metas').hidden = estado.metas.length === 0;
+  if (estado.metas.length) {
+    $('#texto-aviso-metas').textContent = dizer('aviso_metas_antigas', { nomes: estado.metas.map((meta) => `"${meta.nome}"`).join(', ') });
+  }
 
   const listaDicas = $('#lista-dicas');
   listaDicas.replaceChildren();
@@ -519,6 +524,32 @@ function itemDeLancamento(lancamento) {
 
 // ---------- Tela da instituição ----------
 
+// Caixinha com meta opcional: a barra e o "guarde R$ X por mês" usam o dinheiro que está nela de verdade (com rendimento).
+function itemDeCaixinha(caixinha, hoje) {
+  const item = clonarModelo('modelo-caixinha');
+  const guardado = saldoComRendimento(estado, caixinha, hoje);
+  pintarMarcador(item, 'var(--rendimento)');
+  let textoDaMeta = '';
+  if (caixinha.meta) {
+    const percentual = Math.max(0, Math.min(100, Math.round((guardado / caixinha.meta) * 100)));
+    const mensal = valorMensalParaMeta({ alvo: caixinha.meta, guardado, prazo: caixinha.prazo }, mesDe(hoje));
+    if (guardado >= caixinha.meta) textoDaMeta = dizer('meta_atingida');
+    else if (mensal) textoDaMeta = dizer('meta_mensal', { valor: formatarMoeda(mensal), prazo: nomeDoMes(caixinha.prazo).toLowerCase() });
+    else textoDaMeta = dizer('meta_faltam', { valor: formatarMoeda(caixinha.meta - guardado) });
+    textoDaMeta = `Meta ${formatarMoeda(caixinha.meta)} · ${percentual}% · ${textoDaMeta}`;
+    item.querySelector('.barra-preenchida').style.setProperty('--percentual', `${percentual}%`);
+  }
+  item.querySelector('.barra-meta').hidden = !caixinha.meta;
+  preencher(item, {
+    titulo: caixinha.nome,
+    detalhe: `${String(caixinha.percentualCdi).replace('.', ',')}% do CDI · rendeu ${formatarMoeda(rendimentoDaInstituicao(estado, caixinha, hoje))}`,
+    meta: textoDaMeta,
+    valor: formatarMoeda(guardado),
+  });
+  item.addEventListener('click', () => abrirCaixinha(caixinha));
+  return item;
+}
+
 function renderizarInstituicao() {
   const instituicao = buscarInstituicao(instituicaoAberta);
   if (!instituicao) {
@@ -545,22 +576,18 @@ function renderizarInstituicao() {
     origem: instituicao,
   }], abrirInstituicao);
 
-  renderizarListaDeAjustes('#inst-caixinhas', caixinhas.map((caixinha) => ({
-    titulo: caixinha.nome,
-    detalhe: `${String(caixinha.percentualCdi).replace('.', ',')}% do CDI · rendeu ${formatarMoeda(rendimentoDaInstituicao(estado, caixinha, hoje))}`,
-    valor: formatarMoeda(saldoComRendimento(estado, caixinha, hoje)),
-    cor: 'var(--rendimento)',
-    origem: caixinha,
-  })), abrirCaixinha);
+  $('#inst-caixinhas').replaceChildren(...caixinhas.map((caixinha) => itemDeCaixinha(caixinha, hoje)));
   $('#inst-vazio-caixinhas').hidden = caixinhas.length > 0;
   $('#inst-botoes-caixinha').hidden = caixinhas.length === 0;
 
   $('#inst-secao-cartao').hidden = !instituicao.temCartao;
   if (instituicao.temCartao) {
     const falta = faltaPagarDaFatura(estado, instituicao.id, mesVisivel);
+    const semCompras = totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel) === 0;
+    const situacaoDaFatura = semCompras ? 'sem compras' : (falta === 0 ? 'paga' : `falta pagar ${formatarMoeda(falta)}`);
     renderizarListaDeAjustes('#inst-cartao', [{
       titulo: `Fatura de ${nomeDoMes(mesVisivel, { curto: true })}`,
-      detalhe: `Fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento} · ${falta === 0 ? 'paga' : `falta pagar ${formatarMoeda(falta)}`}`,
+      detalhe: `Fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento} · ${situacaoDaFatura}`,
       valor: formatarMoeda(totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel)),
       cor: instituicao.cor,
       origem: null,
@@ -693,31 +720,6 @@ function montarGraficoGuardado(container, contas, meses) {
     barras.append(barra);
   });
   container.append(bloco);
-}
-
-function renderizarMetas() {
-  const lista = $('#lista-metas');
-  lista.replaceChildren();
-  const mesHoje = mesDe(hojeISO());
-  for (const meta of estado.metas) {
-    const item = clonarModelo('modelo-meta');
-    const percentual = Math.min(100, Math.round((meta.guardado / meta.alvo) * 100));
-    const mensal = valorMensalParaMeta(meta, mesHoje);
-    let dica = `Faltam ${formatarMoeda(Math.max(0, meta.alvo - meta.guardado))}`;
-    if (meta.guardado >= meta.alvo) dica = 'Meta atingida!';
-    else if (mensal) dica = `Guarde ${formatarMoeda(mensal)} por mês até ${nomeDoMes(meta.prazo).toLowerCase()}`;
-    preencher(item, {
-      nome: meta.nome,
-      percentual: `${percentual}%`,
-      valores: `${formatarMoeda(meta.guardado)} de ${formatarMoeda(meta.alvo)}`,
-      dica,
-    });
-    item.querySelector('.barra-preenchida').style.setProperty('--percentual', `${percentual}%`);
-    item.querySelector('[data-acao="movimentar"]').addEventListener('click', () => abrirAporte(meta));
-    item.querySelector('[data-acao="editar"]').addEventListener('click', () => abrirMeta(meta));
-    lista.append(item);
-  }
-  $('#vazio-metas').hidden = estado.metas.length > 0;
 }
 
 function renderizarListaDeAjustes(idLista, itens, aoTocar) {
@@ -1115,6 +1117,8 @@ function abrirCaixinha(caixinha) {
     formCaixinha.nome.value = caixinha.nome;
     formCaixinha.percentualCdi.value = String(caixinha.percentualCdi).replace('.', ',');
     formCaixinha.saldoInicial.value = caixinha.saldoInicial ? centavosParaTexto(caixinha.saldoInicial) : '';
+    formCaixinha.meta.value = caixinha.meta ? centavosParaTexto(caixinha.meta) : '';
+    formCaixinha.prazo.value = caixinha.prazo ?? '';
   }
   abrirDialogo('dialogo-caixinha', { titulo: caixinha ? 'Editar caixinha' : 'Nova caixinha', editando: Boolean(caixinha) });
 }
@@ -1125,11 +1129,15 @@ ligarDialogo('dialogo-caixinha', {
     if (!(percentualCdi !== null && percentualCdi <= 300)) return falharCampo(form.percentualCdi, 'Informe o % do CDI, ex.: 100.');
     const saldoInicial = dados.get('saldoInicial').trim() === '' ? 0 : lerValorEmCentavos(dados.get('saldoInicial'));
     if (saldoInicial === null) return falharCampo(form.saldoInicial, 'Valor inválido.');
+    const meta = dados.get('meta').trim() === '' ? null : lerValorEmCentavos(dados.get('meta'));
+    if (meta === 0 || (dados.get('meta').trim() !== '' && meta === null)) return falharCampo(form.meta, 'Valor inválido. Deixe vazio se não quiser meta.');
     const original = emEdicao.caixinha;
     const dadosCaixinha = {
       nome: dados.get('nome').trim(),
       percentualCdi,
       saldoInicial,
+      meta,
+      prazo: meta ? (dados.get('prazo') || null) : null,
       saldoEm: original && saldoInicial === original.saldoInicial ? original.saldoEm : hojeISO(),
     };
     if (original) Object.assign(original, dadosCaixinha);
@@ -1281,60 +1289,6 @@ ligarDialogo('dialogo-categoria', {
   },
 });
 
-// ---------- Metas ----------
-
-const formMeta = $('#form-meta');
-const formAporte = $('#form-aporte');
-
-function abrirMeta(meta) {
-  emEdicao.meta = meta;
-  formMeta.reset();
-  if (meta) {
-    formMeta.nome.value = meta.nome;
-    formMeta.alvo.value = centavosParaTexto(meta.alvo);
-    formMeta.guardado.value = centavosParaTexto(meta.guardado);
-    formMeta.prazo.value = meta.prazo ?? '';
-  }
-  abrirDialogo('dialogo-meta', { titulo: meta ? 'Editar meta' : 'Nova meta', editando: Boolean(meta) });
-}
-
-function abrirAporte(meta) {
-  emEdicao.aporte = meta;
-  formAporte.reset();
-  abrirDialogo('dialogo-aporte', { titulo: meta.nome });
-  formAporte.valor.focus();
-}
-
-ligarDialogo('dialogo-meta', {
-  aoSalvar(dados, form) {
-    const alvo = lerValorEmCentavos(dados.get('alvo'));
-    if (!alvo) return falharCampo(form.alvo, 'Informe quanto quer juntar.');
-    const guardado = dados.get('guardado').trim() === '' ? 0 : lerValorEmCentavos(dados.get('guardado'));
-    if (guardado === null) return falharCampo(form.guardado, 'Valor inválido.');
-    const dadosMeta = { nome: dados.get('nome').trim(), alvo, guardado, prazo: dados.get('prazo') || null };
-    if (emEdicao.meta) Object.assign(emEdicao.meta, dadosMeta);
-    else estado.metas.push({ id: criarId(), ...dadosMeta });
-    return null;
-  },
-  aoExcluir() {
-    if (!confirm(`Excluir a meta "${emEdicao.meta.nome}"?`)) return false;
-    estado.metas = estado.metas.filter((m) => m.id !== emEdicao.meta.id);
-    return true;
-  },
-});
-
-ligarDialogo('dialogo-aporte', {
-  aoSalvar(dados, form) {
-    const valor = lerValorEmCentavos(dados.get('valor'));
-    if (!valor) return falharCampo(form.valor, 'Informe um valor maior que zero.');
-    const meta = emEdicao.aporte;
-    const retirar = dados.get('operacao') === 'retirar';
-    meta.guardado = Math.max(0, meta.guardado + (retirar ? -valor : valor));
-    avisar(retirar ? 'resgatou' : 'guardou', { valor: formatarMoeda(valor) });
-    return null;
-  },
-});
-
 // ---------- Backup ----------
 
 function exportarBackup() {
@@ -1420,6 +1374,11 @@ $('#mes-seguinte').addEventListener('click', () => trocarMes(1));
 $('#botao-novo-lancamento').addEventListener('click', () => abrirLancamento(null,
   document.body.dataset.tela === 'instituicao' ? { pagamento: `${instituicaoAberta}|conta` } : {}));
 $('#botao-voltar').addEventListener('click', () => trocarTela('inicio'));
+$('#botao-entendi-metas').addEventListener('click', () => {
+  estado.metas = [];
+  salvarEstado();
+  renderizarTudo();
+});
 $('#botao-editar-instituicao').addEventListener('click', () => abrirInstituicao(buscarInstituicao(instituicaoAberta)));
 $('#botao-nova-caixinha').addEventListener('click', () => abrirCaixinha(null));
 $('#botao-guardar').addEventListener('click', () => guardarOuResgatar(true));
@@ -1427,7 +1386,6 @@ $('#botao-resgatar').addEventListener('click', () => guardarOuResgatar(false));
 $('#botao-nova-instituicao').addEventListener('click', () => abrirInstituicao(null));
 $('#botao-nova-fixa').addEventListener('click', () => abrirFixa(null));
 $('#botao-nova-categoria').addEventListener('click', () => abrirCategoria(null));
-$('#botao-nova-meta').addEventListener('click', () => abrirMeta(null));
 $('#botao-exportar').addEventListener('click', exportarBackup);
 $('#botao-importar').addEventListener('click', () => $('#arquivo-importar').click());
 $('#arquivo-importar').addEventListener('change', (evento) => {

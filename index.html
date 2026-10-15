@@ -50,6 +50,11 @@
         <div><span class="rotulo">Falta pagar no mês</span><strong id="resumo-a-pagar">R$ 0,00</strong></div>
       </div>
 
+      <div class="aviso-metas" id="aviso-metas" hidden>
+        <p id="texto-aviso-metas"></p>
+        <button class="botao botao-secundario" id="botao-entendi-metas">Entendi</button>
+      </div>
+
       <ul class="lista-dicas" id="lista-dicas"></ul>
 
       <h2>Minhas instituições</h2>
@@ -142,12 +147,6 @@
       <p class="vazio" id="vazio-guardado">Nenhuma caixinha ainda. No Início, toque no seu banco → Caixinhas → Adicionar. Se você criou caixinhas como instituição, edite cada uma em Ajustes e escolha "Na verdade é uma caixinha de…".</p>
     </section>
 
-    <section class="tela" id="tela-metas">
-      <ul class="lista-metas" id="lista-metas"></ul>
-      <p class="vazio" id="vazio-metas">Crie uma meta, como reserva de emergência ou viagem.</p>
-      <button class="botao botao-secundario largura-total" id="botao-nova-meta">Nova meta</button>
-    </section>
-
     <section class="tela" id="tela-ajustes">
       <div class="secao-ajuste">
         <div class="secao-ajuste-topo"><h2>Instituições</h2><button class="botao-link" id="botao-nova-instituicao">Adicionar</button></div>
@@ -203,7 +202,6 @@
     <button class="aba" data-tela="inicio"><span class="aba-icone">◉</span>Início</button>
     <button class="aba" data-tela="lancamentos"><span class="aba-icone">☰</span>Lançamentos</button>
     <button class="aba" data-tela="graficos"><span class="aba-icone">◔</span>Gráficos</button>
-    <button class="aba" data-tela="metas"><span class="aba-icone">⚑</span>Metas</button>
     <button class="aba" data-tela="ajustes"><span class="aba-icone">⚙</span>Ajustes</button>
   </nav>
 
@@ -307,6 +305,14 @@
           <input name="saldoInicial" inputmode="decimal" pattern="[0-9.,]*" placeholder="0,00" autocomplete="off">
         </label>
       </div>
+      <div class="linha-campos">
+        <label class="campo">Meta: quero juntar (R$)
+          <input name="meta" inputmode="decimal" pattern="[0-9.,]*" placeholder="Opcional" autocomplete="off">
+        </label>
+        <label class="campo">Até quando
+          <input type="month" name="prazo">
+        </label>
+      </div>
       <p class="ajuda">Para colocar ou tirar dinheiro, use Guardar e Resgatar na tela da instituição.</p>
       <div class="acoes-dialogo">
         <button class="botao" value="salvar">Salvar</button>
@@ -374,48 +380,6 @@
     </form>
   </dialog>
 
-  <dialog id="dialogo-meta">
-    <form method="dialog" id="form-meta">
-      <h3 data-titulo>Nova meta</h3>
-      <label class="campo">Nome
-        <input name="nome" maxlength="40" placeholder="Ex.: Reserva de emergência" required>
-      </label>
-      <div class="linha-campos">
-        <label class="campo">Quero juntar (R$)
-          <input name="alvo" inputmode="decimal" pattern="[0-9.,]+" required autocomplete="off">
-        </label>
-        <label class="campo">Já tenho (R$)
-          <input name="guardado" inputmode="decimal" pattern="[0-9.,]*" placeholder="0,00" autocomplete="off">
-        </label>
-      </div>
-      <label class="campo">Até quando (opcional)
-        <input type="month" name="prazo">
-      </label>
-      <div class="acoes-dialogo">
-        <button class="botao" value="salvar">Salvar</button>
-        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
-        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="dialogo-aporte">
-    <form method="dialog" id="form-aporte">
-      <h3 data-titulo>Movimentar meta</h3>
-      <div class="segmentado">
-        <label><input type="radio" name="operacao" value="guardar" checked><span>Guardar</span></label>
-        <label><input type="radio" name="operacao" value="retirar"><span>Retirar</span></label>
-      </div>
-      <label class="campo campo-valor">
-        <span class="rotulo">Valor</span>
-        <input name="valor" inputmode="decimal" pattern="[0-9.,]+" placeholder="R$ 0,00" required autocomplete="off">
-      </label>
-      <div class="acoes-dialogo">
-        <button class="botao" value="salvar">Confirmar</button>
-        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
 
   <dialog id="dialogo-instalar">
     <form method="dialog">
@@ -539,19 +503,16 @@
     </button>
   </template>
 
-  <template id="modelo-meta">
-    <li class="meta">
-      <div class="orcamento-linha">
-        <strong data-campo="nome"></strong>
-        <span data-campo="percentual"></span>
+  <template id="modelo-caixinha">
+    <li class="item item-caixinha" tabindex="0">
+      <span class="marcador"></span>
+      <div class="item-texto">
+        <strong data-campo="titulo"></strong>
+        <small data-campo="detalhe"></small>
+        <div class="barra barra-meta"><span class="barra-preenchida"></span></div>
+        <small class="texto-meta" data-campo="meta"></small>
       </div>
-      <div class="barra"><span class="barra-preenchida"></span></div>
-      <span class="meta-valores" data-campo="valores"></span>
-      <small class="meta-dica" data-campo="dica"></small>
-      <div class="linha-botoes">
-        <button class="botao" data-acao="movimentar">Movimentar</button>
-        <button class="botao botao-secundario" data-acao="editar">Editar</button>
-      </div>
+      <span class="item-valor" data-campo="valor"></span>
     </li>
   </template>
 </body>
