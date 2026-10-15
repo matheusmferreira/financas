@@ -13,13 +13,17 @@ function substituir(texto, procurado, novo) {
   return texto.replace(procurado, () => novo);
 }
 
-const importDosCalculos = /import\s*\{[\s\S]*?\}\s*from\s*'\.\/calculos\.js';\n/;
-const appSemImport = ler('js/app.js').replace(importDosCalculos, '');
-if (appSemImport === ler('js/app.js')) throw new Error('Import de calculos.js não encontrado em app.js');
+function semImport(codigo, modulo) {
+  const padrao = new RegExp(`import\\s*\\{[\\s\\S]*?\\}\\s*from\\s*'\\./${modulo.replace('.', '\\.')}';\\n`);
+  if (!padrao.test(codigo)) throw new Error(`Import de ${modulo} não encontrado em app.js`);
+  return codigo.replace(padrao, '');
+}
 
-// Os dois módulos viram um só script: os "export" deixam de ser necessários.
-const calculosSemExport = ler('js/calculos.js').replace(/^export /gm, '');
-const codigo = `${calculosSemExport}\n${appSemImport}`;
+const appSemImport = semImport(semImport(ler('js/app.js'), 'calculos.js'), 'mensagens.js');
+
+// Os módulos viram um só script: os "export" deixam de ser necessários.
+const semExport = (arquivo) => ler(arquivo).replace(/^export /gm, '');
+const codigo = `${semExport('js/calculos.js')}\n${semExport('js/mensagens.js')}\n${appSemImport}`;
 
 const iconeEmDataUri = `data:image/svg+xml,${encodeURIComponent(ler('icones/icone.svg').trim())}`;
 

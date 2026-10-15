@@ -69,10 +69,12 @@ export function nomeDoDia(dataISO) {
 
 // Compra feita no dia do fechamento ou depois já vai para a fatura seguinte.
 // Se o vencimento é antes do fechamento no calendário (ex.: fecha 28, vence 5), a fatura vence no mês seguinte ao fechamento.
+// Fechamento no dia 29–31 em mês mais curto acontece no último dia daquele mês.
 export function mesDaPrimeiraFatura(dataCompra, instituicao) {
   const diaCompra = Number(dataCompra.slice(8, 10));
   let mesFechamento = mesDe(dataCompra);
-  if (diaCompra >= instituicao.diaFechamento) mesFechamento = somarMeses(mesFechamento, 1);
+  const diaDeFechamentoNoMes = Number(dataNoMes(mesFechamento, instituicao.diaFechamento).slice(8));
+  if (diaCompra >= diaDeFechamentoNoMes) mesFechamento = somarMeses(mesFechamento, 1);
   return instituicao.diaVencimento > instituicao.diaFechamento ? mesFechamento : somarMeses(mesFechamento, 1);
 }
 
@@ -113,6 +115,18 @@ export function totalDaFatura(lancamentos, instituicaoId, mes) {
     .reduce((soma, lancamento) => soma + lancamento.valor, 0);
 }
 
+// O valor pago fica guardado ao marcar a fatura: se entrar compra nova nela depois, a diferença volta a ficar pendente
+// em vez de a fatura continuar "paga" com valor maior. Faturas marcadas antes disso não têm valor guardado: vale o total.
+export function valorPagoDaFatura(estado, instituicaoId, mes) {
+  const chave = chaveFatura(instituicaoId, mes);
+  if (!estado.faturasPagas.includes(chave)) return 0;
+  return estado.valoresFaturasPagas[chave] ?? totalDaFatura(estado.lancamentos, instituicaoId, mes);
+}
+
+export function faltaPagarDaFatura(estado, instituicaoId, mes) {
+  return Math.max(0, totalDaFatura(estado.lancamentos, instituicaoId, mes) - valorPagoDaFatura(estado, instituicaoId, mes));
+}
+
 export function resumoDoMes(estado, mes) {
   const doMes = lancamentosDoMes(estado.lancamentos, mes);
   const receitas = doMes.filter((l) => l.tipo === 'receita').reduce((soma, l) => soma + l.valor, 0);
@@ -120,16 +134,17 @@ export function resumoDoMes(estado, mes) {
   const contasPendentes = doMes
     .filter((l) => l.tipo === 'despesa' && !l.credito && !l.pago)
     .reduce((soma, l) => soma + l.valor, 0);
-  const faturasPendentes = estado.instituicoes
-    .filter((instituicao) => !estado.faturasPagas.includes(chaveFatura(instituicao.id, mes)))
-    .reduce((soma, instituicao) => soma + totalDaFatura(estado.lancamentos, instituicao.id, mes), 0);
+  const faturasPendentes = estado.instituicoes.reduce((soma, instituicao) => soma + faltaPagarDaFatura(estado, instituicao.id, mes), 0);
   return { receitas, despesas, saldo: receitas - despesas, aPagar: contasPendentes + faturasPendentes };
 }
 
 // Entradas e saídas de dinheiro da conta, com data: tudo que já foi pago/recebido por ela (débito, Pix, dinheiro),
 // transferências e faturas do cartão dela já marcadas como pagas (na data do vencimento).
 // Transferência só move dinheiro entre instituições: não entra em receitas/despesas do mês.
+// O saldo informado no cadastro é "o saldo de hoje" (saldoEm): lançamentos de antes dessa data já estão nele e
+// não contam de novo. Saldo informado zero não tem nada embutido, então o histórico lançado depois conta normalmente.
 function movimentosDaInstituicao(estado, instituicao) {
+  const jaEstaNoSaldoInformado = (data) => Boolean(instituicao.saldoEm) && instituicao.saldoInicial !== 0 && data < instituicao.saldoEm;
   const movimentos = [];
   for (const lancamento of estado.lancamentos) {
     if (lancamento.credito || !lancamento.pago) continue;
@@ -144,13 +159,16 @@ function movimentosDaInstituicao(estado, instituicao) {
   for (const chave of estado.faturasPagas) {
     const [instituicaoId, mes] = chave.split('|');
     if (instituicaoId !== instituicao.id) continue;
-    movimentos.push({ data: dataNoMes(mes, instituicao.diaVencimento), valor: -totalDaFatura(estado.lancamentos, instituicao.id, mes) });
+    movimentos.push({ data: dataNoMes(mes, instituicao.diaVencimento), valor: -valorPagoDaFatura(estado, instituicao.id, mes) });
   }
-  return movimentos;
+  return movimentos.filter((movimento) => !jaEstaNoSaldoInformado(movimento.data));
 }
 
-export function saldoDaInstituicao(estado, instituicao) {
-  return movimentosDaInstituicao(estado, instituicao).reduce((saldo, movimento) => saldo + movimento.valor, instituicao.saldoInicial);
+// Saldo até hoje: lançamento com data futura (mesmo marcado como pago) só conta quando a data chegar.
+export function saldoDaInstituicao(estado, instituicao, hoje) {
+  return movimentosDaInstituicao(estado, instituicao)
+    .filter((movimento) => movimento.data <= hoje)
+    .reduce((saldo, movimento) => saldo + movimento.valor, instituicao.saldoInicial);
 }
 
 export function diasCorridosEntre(dataInicialISO, dataFinalISO) {
@@ -187,7 +205,7 @@ export function rendimentoDaInstituicao(estado, instituicao, hoje) {
 // Contas que rendem: caixinhas e instituições cuja própria conta rende % do CDI.
 // Caixinha usa o mesmo formato de conta ({ id, saldoInicial, percentualCdi, rendeDesde }), então saldo e rendimento
 // são calculados pelas mesmas funções; lançamentos apontam para ela pelo id, como para uma instituição.
-function contasQueRendem(estado) {
+export function contasQueRendem(estado) {
   return [...estado.instituicoes.filter((instituicao) => instituicao.percentualCdi), ...estado.caixinhas];
 }
 
@@ -215,7 +233,7 @@ export function caixinhasDaInstituicao(estado, instituicaoId) {
 }
 
 export function saldoComRendimento(estado, conta, ate) {
-  return saldoDaInstituicao(estado, conta) + rendimentoDaInstituicao(estado, conta, ate);
+  return saldoDaInstituicao(estado, conta, ate) + rendimentoDaInstituicao(estado, conta, ate);
 }
 
 // Tudo o que a pessoa tem na instituição: a conta (com rendimento, se render) e as caixinhas dela.
@@ -279,15 +297,15 @@ export function planoDoMes(estado, mes, hoje) {
 }
 
 // Dicas a partir dos números da pessoa, da mais urgente para a menos. Só entra o que vale para ela agora.
+// Devolve o tipo da dica (chave) e os números já formatados; o texto vem de mensagens.js, no jeito de falar escolhido.
 export function dicasDoMes(estado, mes, hoje) {
   const dicas = [];
   const plano = planoDoMes(estado, mes, hoje);
   const ehMesAtual = mes === mesDe(hoje);
 
-  if (plano.entradas === 0) {
-    dicas.push({ nivel: 'dica', texto: 'Cadastre seu salário como conta fixa (Ajustes) para o app calcular quanto você pode gastar no mês.' });
-  } else if (plano.podeGastar < 0) {
-    dicas.push({ nivel: 'alerta', texto: `Os gastos do mês passaram ${formatarMoeda(-plano.podeGastar)} do planejado, já contando os ${formatarMoeda(plano.metaGuardar)} para guardar.` });
+  // Sem entradas no mês, o pedido para cadastrar o salário já aparece no comentário do painel do Início.
+  if (plano.entradas > 0 && plano.podeGastar < 0) {
+    dicas.push({ nivel: 'alerta', chave: 'passou_planejado', valores: { valor: formatarMoeda(-plano.podeGastar), meta: formatarMoeda(plano.metaGuardar) } });
   }
 
   const gastosPorCat = gastosPorCategoria(estado.lancamentos, mes);
@@ -300,21 +318,22 @@ export function dicasDoMes(estado, mes, hoje) {
   for (const { categoria, percentual } of avisosDeCategoria) {
     const excesso = (gastosPorCat.get(categoria.id) ?? 0) - categoria.limite;
     dicas.push(percentual > 100
-      ? { nivel: 'alerta', texto: `${categoria.nome} passou ${formatarMoeda(excesso)} do limite do mês.` }
-      : { nivel: 'atencao', texto: `${categoria.nome} já usou ${percentual}% do limite${ehMesAtual ? ` e faltam ${plano.diasRestantes} dias para o mês acabar` : ''}.` });
+      ? { nivel: 'alerta', chave: 'categoria_estourou', valores: { categoria: categoria.nome, valor: formatarMoeda(excesso) } }
+      : { nivel: 'atencao', chave: 'categoria_perto', valores: { categoria: categoria.nome, percentual, faltam: ehMesAtual ? ` e faltam ${plano.diasRestantes} dias para o mês acabar` : '' } });
   }
 
   const diaDeHoje = Number(hoje.slice(8));
   if (ehMesAtual && plano.entradas > 0 && plano.podeGastar >= 0 && diaDeHoje >= 5 && plano.gastos > 0) {
-    // Contas fixas (aluguel etc.) acontecem uma vez no mês: entram inteiras; só o gasto do dia a dia é projetado pelo ritmo.
+    // Contas fixas (aluguel etc.) e parcelas de compras de meses anteriores acontecem uma vez no mês: entram inteiras;
+    // só o gasto do dia a dia é projetado pelo ritmo.
     const gastosFixos = despesasDoMesPorCompetencia(estado.lancamentos, mes)
-      .filter((lancamento) => lancamento.fixaId)
+      .filter((lancamento) => lancamento.fixaId || (lancamento.compra && mesDe(lancamento.compra.dataCompra) !== mes))
       .reduce((soma, lancamento) => soma + lancamento.valor, 0);
     const gastosDoDiaADia = plano.gastos - gastosFixos;
     const projecao = gastosFixos + Math.round((gastosDoDiaADia / diaDeHoje) * diasNoMes(mes));
     const planejado = plano.entradas - plano.metaGuardar;
     if (projecao > planejado) {
-      dicas.push({ nivel: 'atencao', texto: `No ritmo de hoje você gastaria ${formatarMoeda(projecao)} no mês, ${formatarMoeda(projecao - planejado)} além do planejado.` });
+      dicas.push({ nivel: 'atencao', chave: 'ritmo', valores: { projecao: formatarMoeda(projecao), excesso: formatarMoeda(projecao - planejado) } });
     }
   }
 
@@ -323,7 +342,7 @@ export function dicasDoMes(estado, mes, hoje) {
       .filter((l) => l.tipo === 'despesa' && !l.credito && !l.pago && l.data >= hoje && Number(l.data.slice(8)) - diaDeHoje <= 3);
     for (const conta of emBreve.slice(0, 2)) {
       const dias = Number(conta.data.slice(8)) - diaDeHoje;
-      dicas.push({ nivel: 'atencao', texto: `${conta.descricao} vence ${dias === 0 ? 'hoje' : `em ${dias} dia${dias > 1 ? 's' : ''}`} (${formatarMoeda(conta.valor)}).` });
+      dicas.push({ nivel: 'atencao', chave: 'conta_vence', valores: { conta: conta.descricao, quando: dias === 0 ? 'hoje' : `em ${dias} dia${dias > 1 ? 's' : ''}`, valor: formatarMoeda(conta.valor) } });
     }
   }
 
@@ -332,13 +351,13 @@ export function dicasDoMes(estado, mes, hoje) {
       const fatura = totalDaFatura(estado.lancamentos, instituicao.id, mes);
       const percentual = Math.round((fatura / plano.entradas) * 100);
       if (percentual > 30) {
-        dicas.push({ nivel: 'atencao', texto: `A fatura do ${instituicao.nome} deste mês é ${percentual}% do que entrou. Acima de 30% costuma apertar o orçamento.` });
+        dicas.push({ nivel: 'atencao', chave: 'fatura_alta', valores: { banco: instituicao.nome, percentual } });
       }
     }
   }
 
   if (plano.metaGuardar > 0 && plano.guardado < plano.metaGuardar) {
-    dicas.push({ nivel: 'dica', texto: `Faltam ${formatarMoeda(plano.metaGuardar - plano.guardado)} para a meta de guardar deste mês. Guardar assim que o salário cai evita gastar antes.` });
+    dicas.push({ nivel: 'dica', chave: 'meta_guardar', valores: { valor: formatarMoeda(plano.metaGuardar - Math.max(0, plano.guardado)) } });
   }
 
   const mediaDeGastos = Math.round([1, 2, 3].reduce((soma, atras) => soma + gastosDoMes(estado.lancamentos, somarMeses(mesDe(hoje), -atras)), 0) / 3);
@@ -346,12 +365,12 @@ export function dicasDoMes(estado, mes, hoje) {
     const reserva = contasQueRendem(estado).reduce((soma, conta) => soma + saldoComRendimento(estado, conta, hoje), 0);
     const meses = reserva / mediaDeGastos;
     if (meses < 6) {
-      dicas.push({ nivel: 'dica', texto: `Seu dinheiro guardado cobre ${meses.toFixed(1).replace('.', ',')} meses dos seus gastos. O recomendado é ter de 3 a 6 meses de reserva em algo que renda e possa ser resgatado na hora.` });
+      dicas.push({ nivel: 'dica', chave: 'reserva', valores: { meses: meses.toFixed(1).replace('.', ',') } });
     }
   }
 
   if (categoriasComLimite.length === 0 && plano.gastos > 0) {
-    dicas.push({ nivel: 'dica', texto: 'Coloque limite nas categorias em que você mais gasta (Ajustes). O app avisa quando estiver chegando perto.' });
+    dicas.push({ nivel: 'dica', chave: 'sem_limites' });
   }
 
   const ordem = { alerta: 0, atencao: 1, dica: 2 };

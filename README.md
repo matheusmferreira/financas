@@ -11,6 +11,7 @@ Cada pessoa que instala tem os próprios dados, separados — o mesmo endereço 
 - **Início (visão geral)**: **ainda posso gastar** = entradas do mês − gastos do mês − meta de guardar (% das entradas, em Ajustes → Planejamento), com valor por dia no mês atual; quanto tenho no total (todas as instituições e caixinhas), quanto falta pagar, até 3 **dicas personalizadas**, instituições, contas do mês e orçamento por categoria.
 - **Tela de cada instituição** (tocar no cartão dela): total, entrou/gastou/rendeu no mês, saldo da conta, **caixinhas** (cada uma com seu % do CDI; botões Guardar/Resgatar), fatura do cartão, gráfico de 6 meses e lançamentos só dela.
 - **Gasto conta no mês da compra (competência)**: compra no cartão entra em "Gastei", no orçamento e nos gráficos no mês em que foi feita (cada parcela no seu mês); "Falta pagar" e a lista de lançamentos seguem o mês da fatura.
+- **Jeito de falar** (Ajustes): **Zoeira** (padrão, debochado e com palavrão, a pedido do dono) ou **Normal**. Saudação pela hora, comentário sobre a situação do mês, reação rápida a cada ação (gasto pequeno/médio/grande, parcelado, entrada, guardar, resgatar, pagar, excluir) e dicas no mesmo tom. Todos os textos ficam em `js/mensagens.js`; textos da tela mudam de um dia para o outro, reações são sorteadas.
 - **Dicas**: excesso sobre o planejado, categoria ≥ 80% do limite, ritmo de gasto (contas fixas contam uma vez, só o dia a dia é projetado), conta vencendo em até 3 dias, fatura > 30% das entradas, meta de guardar pendente, reserva < 6 meses de gastos, falta de limites. Regras em `dicasDoMes` (`js/calculos.js`).
 - **Lançamentos**: tudo do mês, agrupado por dia, com filtros (saídas, entradas, cartão). Tocar num item edita.
 - **Instituições**: Nubank, Itaú, dinheiro etc. Cada uma tem saldo; se tiver cartão, informa fechamento e vencimento.
@@ -31,6 +32,7 @@ Cada pessoa que instala tem os próprios dados, separados — o mesmo endereço 
 | `index.html` | Estrutura das telas, formulários e modelos (`<template>`) |
 | `css/estilo.css` | Visual (tema claro/escuro automático) |
 | `js/calculos.js` | Regras puras: dinheiro em centavos, meses, fatura, parcelas, saldos |
+| `js/mensagens.js` | Tudo o que o app fala com a pessoa, nos jeitos Zoeira e Normal |
 | `js/app.js` | Tela: renderização, formulários, backup |
 | `sw.js` | Cache para funcionar offline |
 | `manifest.webmanifest` + `icones/` | O que torna o site instalável |
@@ -73,6 +75,14 @@ O site publicado não contém nenhum dado seu — os lançamentos ficam só no c
 
 - Desinstalar o app ou limpar os dados do navegador **apaga os lançamentos**. Exporte backup de vez em quando.
 - Trocar de celular: exporte o backup no antigo e importe no novo.
+
+## Regras que evitam erro de conta
+
+- **Saldo na conta hoje** (cadastro da instituição/caixinha): guarda a data (`saldoEm`); lançamentos com data anterior já estão nesse saldo e não são descontados de novo. Saldo informado zero não tem nada embutido, então o histórico conta.
+- **Data futura**: só mexe no saldo quando a data chega; lançamento novo com data futura nasce "a pagar".
+- **Fatura paga**: guarda o valor pago (`valoresFaturasPagas`); se entrar compra nela depois, a diferença volta a "Falta pagar".
+- **Fechamento dia 29–31** em mês curto vale o último dia daquele mês.
+- **Formulários**: no HTML "Salvar" é o primeiro botão (Enter/"Ir" do teclado nunca aciona "Excluir"); a ordem visual vem do CSS.
 
 ## Histórico
 

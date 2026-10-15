@@ -1,10 +1,11 @@
 import {
   formatarMoeda, centavosParaTexto, lerValorEmCentavos, hojeISO, mesDe, somarMeses, dataNoMes, nomeDoMes, nomeDoDia,
-  gerarParcelasDoCartao, chaveFatura, lancamentosDoMes, totalDaFatura, resumoDoMes,
+  gerarParcelasDoCartao, chaveFatura, lancamentosDoMes, totalDaFatura, resumoDoMes, faltaPagarDaFatura, contasQueRendem,
   gastosPorCategoria, lancamentosDasFixas, valorMensalParaMeta, rendimentoDaInstituicao, guardadoNoFimDoMes,
   gastosDoMes, planoDoMes, dicasDoMes, caixinhasDaInstituicao, saldoComRendimento, totalDaInstituicao, rendeuNoMes,
   resumoDaInstituicaoNoMes,
 } from './calculos.js';
+import { falar } from './mensagens.js';
 
 const CHAVE_ARMAZENAMENTO = 'controle-financeiro:v1';
 
@@ -50,6 +51,8 @@ function estadoInicial() {
     cdiAnual: null,
     caixinhas: [],
     percentualGuardar: 10,
+    valoresFaturasPagas: {},
+    tom: 'zoeira',
   };
 }
 
@@ -57,6 +60,8 @@ function estadoInicial() {
 function normalizarEstado(dados) {
   dados.caixinhas ??= [];
   dados.percentualGuardar ??= 10;
+  dados.valoresFaturasPagas ??= {};
+  dados.tom ??= 'zoeira';
   return dados;
 }
 
@@ -83,6 +88,60 @@ function nomeDaConta(id) {
 function corDaConta(id) {
   const caixinha = buscarCaixinha(id);
   return buscarInstituicao(caixinha ? caixinha.instituicaoId : id)?.cor ?? '#64748b';
+}
+
+// ---------- Falar com a pessoa ----------
+
+// Textos fixos da tela sorteiam pela data: mudam de um dia para o outro, não a cada toque.
+const sorteioDoDia = () => Number(hojeISO().replaceAll('-', ''));
+const dizer = (chave, valores) => falar(estado.tom, chave, valores, sorteioDoDia());
+
+let temporizadorDoAviso = null;
+let avisouNestaAcao = false;
+function avisar(chave, valores) {
+  avisouNestaAcao = true;
+  const aviso = $('#aviso-rapido');
+  aviso.textContent = falar(estado.tom, chave, valores);
+  aviso.hidden = false;
+  clearTimeout(temporizadorDoAviso);
+  temporizadorDoAviso = setTimeout(() => { aviso.hidden = true; }, 4000);
+}
+
+function saudacaoDaHora() {
+  const hora = new Date().getHours();
+  if (hora < 5) return 'saudacao_madrugada';
+  if (hora < 12) return 'saudacao_manha';
+  if (hora < 18) return 'saudacao_tarde';
+  return 'saudacao_noite';
+}
+
+// Situação do mês para o comentário embaixo do "Ainda posso gastar".
+function situacaoDoMes(plano) {
+  if (plano.entradas === 0) return 'situacao_sem_entradas';
+  if (plano.podeGastar < 0) return 'situacao_passou';
+  const planejado = plano.entradas - plano.metaGuardar;
+  if (plano.podeGastar < planejado * 0.15) return 'situacao_apertado';
+  if (plano.podeGastar > planejado * 0.5) return 'situacao_sobrando';
+  return 'situacao_tranquilo';
+}
+
+const VALOR_DE_GASTO_GRANDE = 50000;
+const VALOR_DE_GASTO_PEQUENO = 2000;
+
+// Reação ao salvar um lançamento: tamanho do gasto, parcelamento, entrada, guardar ou resgatar da caixinha.
+function reagirAoLancamento({ tipo, valor, parcelas, categoriaId, origemId, destinoId }) {
+  if (tipo === 'transferencia') {
+    const rendem = new Set(contasQueRendem(estado).map((conta) => conta.id));
+    if (rendem.has(destinoId) && !rendem.has(origemId)) return avisar('guardou', { valor: formatarMoeda(valor) });
+    if (rendem.has(origemId) && !rendem.has(destinoId)) return avisar('resgatou', { valor: formatarMoeda(valor) });
+    return avisar('transferiu');
+  }
+  if (tipo === 'receita') return avisar('entrada', { valor: formatarMoeda(valor) });
+  if (parcelas > 1) return avisar('gasto_parcelado', { parcelas, parcela: formatarMoeda(Math.round(valor / parcelas)) });
+  const entradasDoMes = planoDoMes(estado, mesVisivel, hojeISO()).entradas;
+  const grande = valor >= VALOR_DE_GASTO_GRANDE || (entradasDoMes > 0 && valor > entradasDoMes * 0.1);
+  const chave = grande ? 'gasto_grande' : (valor < VALOR_DE_GASTO_PEQUENO ? 'gasto_pequeno' : 'gasto_medio');
+  avisar(chave, { valor: formatarMoeda(valor), categoria: buscarCategoria(categoriaId)?.nome ?? '' });
 }
 
 // ---------- Utilidades de tela ----------
@@ -146,7 +205,8 @@ function ligarDialogo(idDialogo, { aoSalvar, aoExcluir }) {
   const form = document.getElementById(idDialogo).querySelector('form');
   form.addEventListener('input', (evento) => evento.target.setCustomValidity?.(''));
   form.addEventListener('submit', (evento) => {
-    const acao = evento.submitter?.value;
+    const acao = evento.submitter?.value ?? 'salvar';
+    avisouNestaAcao = false;
     if (acao === 'salvar') {
       const erro = aoSalvar(new FormData(form), form);
       if (erro) {
@@ -164,6 +224,8 @@ function ligarDialogo(idDialogo, { aoSalvar, aoExcluir }) {
     } else {
       return;
     }
+    // Reação padrão quando o formulário não tem uma reação própria.
+    if (!avisouNestaAcao) avisar(acao === 'excluir' ? 'excluiu' : 'salvo');
     salvarEstado();
     renderizarTudo();
   });
@@ -175,6 +237,8 @@ function abrirDialogo(idDialogo, { titulo, editando }) {
   if (cabecalho && titulo) cabecalho.textContent = titulo;
   const botaoExcluir = dialogo.querySelector('[data-excluir]');
   if (botaoExcluir) botaoExcluir.hidden = !editando;
+  // reset() não limpa mensagens de erro: sem isso, um erro de um uso anterior bloquearia o próximo envio.
+  for (const campo of dialogo.querySelector('form').elements) campo.setCustomValidity?.('');
   dialogo.showModal();
 }
 
@@ -252,15 +316,18 @@ function renderizarTudo() {
   renderizarAjustes();
 }
 
-const ROTULOS_DE_DICA = { alerta: 'Alerta', atencao: 'Atenção', dica: 'Dica' };
 const DICAS_NO_INICIO = 3;
 
 function renderizarInicio() {
   const hoje = hojeISO();
   const plano = planoDoMes(estado, mesVisivel, hoje);
-  const passou = plano.podeGastar < 0;
+  // Sem nenhuma entrada no mês não há planejado para "passar": mostra zero e o comentário pede o salário.
+  const semEntradas = plano.entradas === 0;
+  const passou = !semEntradas && plano.podeGastar < 0;
+  $('#saudacao').textContent = dizer(saudacaoDaHora());
+  $('#resumo-comentario').textContent = dizer(situacaoDoMes(plano), { valor: formatarMoeda(Math.abs(plano.podeGastar)) });
   $('#rotulo-pode-gastar').textContent = passou ? 'Passou do planejado' : 'Ainda posso gastar';
-  $('#resumo-pode-gastar').textContent = formatarMoeda(Math.abs(plano.podeGastar));
+  $('#resumo-pode-gastar').textContent = formatarMoeda(semEntradas ? 0 : Math.abs(plano.podeGastar));
   $('#resumo-pode-gastar').classList.toggle('negativo', passou);
   $('#resumo-por-dia').textContent = plano.porDia !== null
     ? `${formatarMoeda(plano.porDia)} por dia nos ${plano.diasRestantes} dias que faltam`
@@ -273,10 +340,10 @@ function renderizarInicio() {
 
   const listaDicas = $('#lista-dicas');
   listaDicas.replaceChildren();
-  for (const { nivel, texto } of dicasDoMes(estado, mesVisivel, hoje).slice(0, DICAS_NO_INICIO)) {
+  for (const { nivel, chave, valores } of dicasDoMes(estado, mesVisivel, hoje).slice(0, DICAS_NO_INICIO)) {
     const item = clonarModelo('modelo-dica');
     item.classList.add(nivel === 'dica' ? 'dica-geral' : nivel);
-    preencher(item, { rotulo: ROTULOS_DE_DICA[nivel], texto });
+    preencher(item, { rotulo: dizer(`rotulo_${nivel}`), texto: dizer(`dica_${chave}`, valores) });
     listaDicas.append(item);
   }
 
@@ -329,6 +396,9 @@ function renderizarContasDoMes() {
     item.classList.toggle('pago', lancamento.pago);
     item.querySelector('.marcar-pago').addEventListener('click', () => {
       lancamento.pago = !lancamento.pago;
+      if (!lancamento.pago) avisar('voltou_pendente');
+      else if (lancamento.tipo === 'receita') avisar('entrada', { valor: formatarMoeda(lancamento.valor) });
+      else avisar('conta_paga');
       salvarEstado();
       renderizarTudo();
     });
@@ -339,18 +409,20 @@ function renderizarContasDoMes() {
   for (const instituicao of estado.instituicoes.filter((i) => i.temCartao)) {
     const total = totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel);
     if (total === 0) continue;
-    const chave = chaveFatura(instituicao.id, mesVisivel);
+    const falta = faltaPagarDaFatura(estado, instituicao.id, mesVisivel);
+    const pagaEmParte = falta > 0 && falta < total;
     const item = clonarModelo('modelo-conta-do-mes');
     preencher(item, {
       titulo: `Fatura ${instituicao.nome}`,
-      detalhe: `Vence dia ${instituicao.diaVencimento}`,
+      detalhe: pagaEmParte
+        ? `Entrou compra depois de paga · faltam ${formatarMoeda(falta)}`
+        : `Vence dia ${instituicao.diaVencimento}`,
       valor: `− ${formatarMoeda(total)}`,
     });
-    item.classList.toggle('pago', estado.faturasPagas.includes(chave));
+    item.classList.toggle('pago', falta === 0);
     item.querySelector('.marcar-pago').addEventListener('click', () => {
-      estado.faturasPagas = estado.faturasPagas.includes(chave)
-        ? estado.faturasPagas.filter((paga) => paga !== chave)
-        : [...estado.faturasPagas, chave];
+      marcarFatura(instituicao.id, mesVisivel);
+      avisar(faltaPagarDaFatura(estado, instituicao.id, mesVisivel) === 0 ? 'fatura_paga' : 'voltou_pendente');
       salvarEstado();
       renderizarTudo();
     });
@@ -362,6 +434,21 @@ function renderizarContasDoMes() {
     lista.append(item);
   }
   $('#vazio-contas-do-mes').hidden = lista.children.length > 0;
+  $('#vazio-contas-do-mes').textContent = dizer('vazio_contas');
+}
+
+// Toque no círculo da fatura: em aberto → paga (guarda o valor); paga com diferença → paga a diferença; paga → desfaz.
+function marcarFatura(instituicaoId, mes) {
+  const chave = chaveFatura(instituicaoId, mes);
+  const total = totalDaFatura(estado.lancamentos, instituicaoId, mes);
+  const jaMarcada = estado.faturasPagas.includes(chave);
+  if (jaMarcada && faltaPagarDaFatura(estado, instituicaoId, mes) === 0) {
+    estado.faturasPagas = estado.faturasPagas.filter((paga) => paga !== chave);
+    delete estado.valoresFaturasPagas[chave];
+    return;
+  }
+  if (!jaMarcada) estado.faturasPagas.push(chave);
+  estado.valoresFaturasPagas[chave] = total;
 }
 
 function renderizarOrcamento() {
@@ -418,6 +505,7 @@ function renderizarLancamentos() {
     lista.append(itemDeLancamento(lancamento));
   }
   $('#vazio-lancamentos').hidden = filtrados.length > 0;
+  $('#vazio-lancamentos').textContent = dizer('vazio_lancamentos');
 }
 
 function itemDeLancamento(lancamento) {
@@ -469,10 +557,10 @@ function renderizarInstituicao() {
 
   $('#inst-secao-cartao').hidden = !instituicao.temCartao;
   if (instituicao.temCartao) {
-    const chave = chaveFatura(instituicao.id, mesVisivel);
+    const falta = faltaPagarDaFatura(estado, instituicao.id, mesVisivel);
     renderizarListaDeAjustes('#inst-cartao', [{
       titulo: `Fatura de ${nomeDoMes(mesVisivel, { curto: true })}`,
-      detalhe: `Fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento} · ${estado.faturasPagas.includes(chave) ? 'paga' : 'em aberto'}`,
+      detalhe: `Fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento} · ${falta === 0 ? 'paga' : `falta pagar ${formatarMoeda(falta)}`}`,
       valor: formatarMoeda(totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel)),
       cor: instituicao.cor,
       origem: null,
@@ -567,10 +655,10 @@ function renderizarGuardado(meses) {
   const hoje = hojeISO();
   const posicoes = meses.map((mes) => guardadoNoFimDoMes(estado, mes, hoje));
   const atual = posicoes.at(-1);
-  const anterior = guardadoNoFimDoMes(estado, somarMeses(mesVisivel, -1), hoje);
   $('#guardado-total').textContent = formatarMoeda(atual.depositado + atual.rendimento);
   $('#guardado-rendeu-total').textContent = formatarMoeda(atual.rendimento);
-  $('#guardado-rendeu-mes').textContent = formatarMoeda(atual.rendimento - anterior.rendimento);
+  // Mesma conta da tela da instituição, para os dois "Rendeu no mês" sempre baterem.
+  $('#guardado-rendeu-mes').textContent = formatarMoeda(rendeuNoMes(estado, contasQueRendem(estado), mesVisivel, hoje));
 
   const barras = $('#barras-guardado');
   const detalhe = $('#detalhe-guardado');
@@ -653,6 +741,7 @@ function renderizarAjustes() {
 
   const campoCdi = $('#campo-cdi');
   if (document.activeElement !== campoCdi) campoCdi.value = estado.cdiAnual ? String(estado.cdiAnual).replace('.', ',') : '';
+  $(`#escolha-tom input[value="${estado.tom}"]`).checked = true;
   const campoGuardar = $('#campo-guardar');
   if (document.activeElement !== campoGuardar) campoGuardar.value = String(estado.percentualGuardar).replace('.', ',');
 
@@ -791,6 +880,7 @@ ligarDialogo('dialogo-lancamento', {
         pago: true,
       });
       estado.ultimoPagamento = dados.get('pagamento');
+      reagirAoLancamento({ tipo: 'transferencia', valor, origemId: instituicaoId, destinoId });
       return null;
     }
 
@@ -802,8 +892,9 @@ ligarDialogo('dialogo-lancamento', {
     };
     if (original) removerLancamento(original);
 
+    const parcelas = forma === 'credito' ? Math.max(1, Math.min(48, Number(dados.get('parcelas')) || 1)) : 1;
+    reagirAoLancamento({ tipo: base.tipo, valor, parcelas, categoriaId: base.categoriaId });
     if (forma === 'credito') {
-      const parcelas = Math.max(1, Math.min(48, Number(dados.get('parcelas')) || 1));
       estado.lancamentos.push(...gerarParcelasDoCartao({
         ...base,
         compraId: original?.compra?.id ?? criarId(),
@@ -834,6 +925,8 @@ ligarDialogo('dialogo-lancamento', {
 
 formLancamento.addEventListener('change', (evento) => {
   if (evento.target.name === 'tipo') atualizarFormLancamento();
+  // Lançamento novo com data futura nasce "a pagar"; com data de hoje ou antes, "já pago".
+  if (evento.target.name === 'data' && !emEdicao.lancamento) formLancamento.pago.checked = formLancamento.data.value <= hojeISO();
   if (evento.target.name === 'pagamento') {
     if (formLancamento.tipo.value === 'transferencia') atualizarFormLancamento();
     else atualizarCamposDeCredito();
@@ -888,10 +981,17 @@ formInstituicao.moverPara.addEventListener('change', () => {
   atualizarCamposDeCartao();
 });
 
+$('#escolha-tom').addEventListener('change', (evento) => {
+  estado.tom = evento.target.value;
+  salvarEstado();
+  renderizarTudo();
+  avisar('salvo');
+});
+
 $('#campo-guardar').addEventListener('change', (evento) => {
   const texto = evento.target.value.trim();
-  const percentual = texto === '' ? 0 : lerPercentual(texto);
-  if (percentual === null || percentual > 100) {
+  const percentual = Number((texto || '0').replace(',', '.'));
+  if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
     evento.target.setCustomValidity('Informe um percentual de 0 a 100, ex.: 10.');
     evento.target.reportValidity();
     return;
@@ -943,6 +1043,7 @@ ligarDialogo('dialogo-instituicao', {
     const moverPara = dados.get('moverPara');
     if (original && moverPara) {
       if (caixinhasDaInstituicao(estado, original.id).length) return falharCampo(form.moverPara, 'Ela tem caixinhas próprias e não pode virar caixinha.');
+      if (!percentualCdi) return falharCampo(form.rendeCdi, 'Caixinha precisa render: marque "A conta rende % do CDI".');
       // Mesmo id: transferências e entradas já lançadas nela continuam apontando para ela, agora como caixinha,
       // e o saldo não muda (saldo e rendimento são calculados pelo id, seja instituição ou caixinha).
       estado.caixinhas.push({
@@ -951,6 +1052,7 @@ ligarDialogo('dialogo-instituicao', {
         nome: dados.get('nome').trim(),
         percentualCdi,
         saldoInicial,
+        saldoEm: saldoInicial === original.saldoInicial ? original.saldoEm : hojeISO(),
         rendeDesde: original.rendeDesde ?? hojeISO(),
       });
       estado.instituicoes = estado.instituicoes.filter((i) => i.id !== original.id);
@@ -961,6 +1063,8 @@ ligarDialogo('dialogo-instituicao', {
       nome: dados.get('nome').trim(),
       cor: dados.get('cor'),
       saldoInicial,
+      // "Saldo na conta hoje": guarda a data para não descontar de novo lançamentos anteriores já embutidos nele.
+      saldoEm: original && saldoInicial === original.saldoInicial ? original.saldoEm : hojeISO(),
       temCartao,
       diaFechamento: temCartao ? diaFechamento : null,
       diaVencimento: temCartao ? diaVencimento : null,
@@ -969,7 +1073,10 @@ ligarDialogo('dialogo-instituicao', {
       rendeDesde: rendeCdi ? (original?.rendeDesde ?? hojeISO()) : null,
     };
     if (original) Object.assign(original, dadosInstituicao);
-    else estado.instituicoes.push({ id: criarId(), ...dadosInstituicao });
+    else {
+      estado.instituicoes.push({ id: criarId(), ...dadosInstituicao });
+      avisar('instituicao_criada', { nome: dadosInstituicao.nome });
+    }
     return null;
   },
   aoExcluir() {
@@ -979,6 +1086,10 @@ ligarDialogo('dialogo-instituicao', {
       || caixinhasDaInstituicao(estado, instituicao.id).length > 0;
     if (emUso) {
       alert('Esta instituição tem lançamentos, contas fixas ou caixinhas. Exclua ou mude esses itens antes.');
+      return false;
+    }
+    if (estado.instituicoes.length === 1) {
+      alert('Precisa existir pelo menos uma instituição (pode ser "Dinheiro") para lançar gastos e entradas.');
       return false;
     }
     if (!confirm(`Excluir ${instituicao.nome}?`)) return false;
@@ -1008,9 +1119,18 @@ ligarDialogo('dialogo-caixinha', {
     if (!(percentualCdi !== null && percentualCdi <= 300)) return falharCampo(form.percentualCdi, 'Informe o % do CDI, ex.: 100.');
     const saldoInicial = dados.get('saldoInicial').trim() === '' ? 0 : lerValorEmCentavos(dados.get('saldoInicial'));
     if (saldoInicial === null) return falharCampo(form.saldoInicial, 'Valor inválido.');
-    const dadosCaixinha = { nome: dados.get('nome').trim(), percentualCdi, saldoInicial };
-    if (emEdicao.caixinha) Object.assign(emEdicao.caixinha, dadosCaixinha);
-    else estado.caixinhas.push({ id: criarId(), instituicaoId: instituicaoAberta, rendeDesde: hojeISO(), ...dadosCaixinha });
+    const original = emEdicao.caixinha;
+    const dadosCaixinha = {
+      nome: dados.get('nome').trim(),
+      percentualCdi,
+      saldoInicial,
+      saldoEm: original && saldoInicial === original.saldoInicial ? original.saldoEm : hojeISO(),
+    };
+    if (original) Object.assign(original, dadosCaixinha);
+    else {
+      estado.caixinhas.push({ id: criarId(), instituicaoId: instituicaoAberta, rendeDesde: hojeISO(), ...dadosCaixinha });
+      avisar('caixinha_criada');
+    }
     return null;
   },
   aoExcluir() {
@@ -1132,6 +1252,11 @@ ligarDialogo('dialogo-categoria', {
     const textoLimite = dados.get('limite').trim();
     const limite = tipo === 'despesa' && textoLimite !== '' ? lerValorEmCentavos(textoLimite) : 0;
     if (limite === null) return falharCampo(form.limite, 'Valor inválido.');
+    const original = emEdicao.categoria;
+    const emUso = original && (estado.lancamentos.some((l) => l.categoriaId === original.id) || estado.fixas.some((f) => f.categoriaId === original.id));
+    if (emUso && tipo !== original.tipo) {
+      return falharCampo(form.querySelector('input[name="tipo"]'), 'Esta categoria já tem lançamentos; não dá para trocar entre saída e entrada.');
+    }
     const dadosCategoria = { nome: dados.get('nome').trim(), tipo, cor: dados.get('cor'), limite };
     if (emEdicao.categoria) Object.assign(emEdicao.categoria, dadosCategoria);
     else estado.categorias.push({ id: criarId(), ...dadosCategoria });
@@ -1197,7 +1322,9 @@ ligarDialogo('dialogo-aporte', {
     const valor = lerValorEmCentavos(dados.get('valor'));
     if (!valor) return falharCampo(form.valor, 'Informe um valor maior que zero.');
     const meta = emEdicao.aporte;
-    meta.guardado = Math.max(0, meta.guardado + (dados.get('operacao') === 'retirar' ? -valor : valor));
+    const retirar = dados.get('operacao') === 'retirar';
+    meta.guardado = Math.max(0, meta.guardado + (retirar ? -valor : valor));
+    avisar(retirar ? 'resgatou' : 'guardou', { valor: formatarMoeda(valor) });
     return null;
   },
 });
@@ -1210,7 +1337,9 @@ function exportarBackup() {
   link.href = URL.createObjectURL(arquivo);
   link.download = `financas-backup-${hojeISO()}.json`;
   link.click();
-  URL.revokeObjectURL(link.href);
+  // Liberar o arquivo na hora cancela o download em alguns navegadores (Chrome e Safari); espera ele começar.
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  avisar('backup_exportado');
 }
 
 async function importarBackup(arquivo) {
@@ -1230,6 +1359,7 @@ async function importarBackup(arquivo) {
   estado = normalizarEstado(dados);
   salvarEstado();
   renderizarTudo();
+  avisar('backup_importado');
 }
 
 // ---------- Instalação ----------

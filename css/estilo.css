@@ -194,6 +194,44 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 .painel-saldo .saldo:has(+ .painel-por-dia:not(:empty)) { margin-bottom: 0; }
 .painel-por-dia { display: block; margin-bottom: 16px; font-size: 0.9rem; font-weight: 600; opacity: 0.85; }
 .painel-por-dia:empty { display: none; }
+.painel-comentario { display: block; margin: -8px 0 16px; font-size: 0.88rem; font-style: italic; opacity: 0.9; }
+.painel-comentario:empty { display: none; }
+
+.saudacao { margin: 0 0 12px; font-size: 1rem; font-weight: 600; }
+
+/* Reação rápida depois de cada ação (some sozinha). */
+.aviso-rapido {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(var(--altura-abas) + env(safe-area-inset-bottom) + 88px);
+  z-index: 20;
+  max-width: 528px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--texto);
+  color: var(--fundo);
+  font-size: 0.92rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
+  animation: subir 0.22s ease-out;
+  pointer-events: none;
+}
+
+/* Categorias recolhidas: a lista é longa e quase nunca muda. */
+.secao-recolhida summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+}
+
+.secao-recolhida summary::-webkit-details-marker { display: none; }
+.ajuda-resumo { font-size: 0.82rem; color: var(--primaria); font-weight: 650; }
+.secao-recolhida[open] .ajuda-resumo { visibility: hidden; }
+.secao-recolhida .lista { margin-bottom: 10px; }
 
 .painel-patrimonio {
   display: grid;
@@ -648,5 +686,9 @@ dialog h3 { margin: 0 0 14px; font-size: 1.15rem; }
 .chip:has(input:checked) { border-color: var(--primaria); background: var(--primaria); color: var(--primaria-texto); font-weight: 600; }
 .chip:has(input:checked) .marcador { box-shadow: 0 0 0 2px var(--primaria-texto); }
 
+/* No HTML "Salvar" vem primeiro: Enter/"Ir" do teclado aciona o primeiro botão do formulário, e não pode ser "Excluir".
+   Na tela a ordem continua Excluir · Cancelar · Salvar. */
 .acoes-dialogo { display: flex; gap: 8px; margin-top: 6px; }
+.acoes-dialogo [value="cancelar"] { order: 1; }
+.acoes-dialogo [value="salvar"] { order: 2; }
 .acoes-dialogo .botao:not(.botao-perigo) { flex: 1; }
