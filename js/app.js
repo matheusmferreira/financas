@@ -702,6 +702,12 @@ function atualizarFormLancamento({ categoriaId, pagamento, destinoId } = {}) {
   const destinoAtual = destinoId ?? formLancamento.querySelector('input[name="destinoId"]:checked')?.value;
   montarChips(formLancamento.querySelector('[data-chips="categoriaId"]'), 'categoriaId', transferencia ? [] : opcoesDeCategoria(tipo), categoriaAtual);
   const opcoesPagamento = opcoesDePagamento(tipo);
+  // Entrada ou gasto antigo lançado direto numa caixinha (antes de ela ir para dentro da instituição):
+  // ao editar, mantém a caixinha como opção para não trocar a conta dele sem querer.
+  const caixinhaDoLancamento = emEdicao.lancamento && buscarCaixinha(pagamentoAtual?.split('|')[0]);
+  if (caixinhaDoLancamento && !opcoesPagamento.some((opcao) => opcao.valor === pagamentoAtual)) {
+    opcoesPagamento.push({ valor: pagamentoAtual, nome: nomeDaConta(caixinhaDoLancamento.id), cor: corDaConta(caixinhaDoLancamento.id) });
+  }
   const pagamentoValido = opcoesPagamento.some((opcao) => opcao.valor === pagamentoAtual) ? pagamentoAtual : opcoesPagamento[0]?.valor;
   montarChips(formLancamento.querySelector('[data-chips="pagamento"]'), 'pagamento', opcoesPagamento, pagamentoValido);
 
@@ -841,9 +847,9 @@ const formInstituicao = $('#form-instituicao');
 function atualizarCamposDeCartao() {
   formInstituicao.querySelector('[data-somente-cartao]').hidden = !formInstituicao.temCartao.checked;
   formInstituicao.querySelector('[data-somente-cdi]').hidden = !formInstituicao.rendeCdi.checked;
-  // Mover para dentro de outra só faz sentido para quem foi criada como "instituição" mas é uma caixinha: rende e não tem cartão.
+  // Para instituições criadas no modelo antigo só para fazer papel de caixinha (sem cartão).
   const podeVirarCaixinha = Boolean(emEdicao.instituicao) && formInstituicao.moverPara.options.length > 1
-    && formInstituicao.rendeCdi.checked && !formInstituicao.temCartao.checked;
+    && !formInstituicao.temCartao.checked;
   formInstituicao.querySelector('[data-somente-mover]').hidden = !podeVirarCaixinha;
   if (!podeVirarCaixinha) formInstituicao.moverPara.value = '';
 }
@@ -876,6 +882,11 @@ function abrirInstituicao(instituicao) {
 
 formInstituicao.temCartao.addEventListener('change', atualizarCamposDeCartao);
 formInstituicao.rendeCdi.addEventListener('change', atualizarCamposDeCartao);
+// Caixinha sempre rende: ao escolher virar caixinha, já liga o % do CDI (100% se ainda não tinha).
+formInstituicao.moverPara.addEventListener('change', () => {
+  if (formInstituicao.moverPara.value) formInstituicao.rendeCdi.checked = true;
+  atualizarCamposDeCartao();
+});
 
 $('#campo-guardar').addEventListener('change', (evento) => {
   const texto = evento.target.value.trim();
@@ -931,11 +942,9 @@ ligarDialogo('dialogo-instituicao', {
 
     const moverPara = dados.get('moverPara');
     if (original && moverPara) {
-      const usadaFora = estado.lancamentos.some((l) => l.tipo !== 'transferencia' && l.instituicaoId === original.id)
-        || estado.fixas.some((f) => f.instituicaoId === original.id);
-      if (usadaFora) return falharCampo(form.moverPara, 'Ela tem gastos, entradas ou contas fixas próprias. Caixinha só recebe transferências.');
       if (caixinhasDaInstituicao(estado, original.id).length) return falharCampo(form.moverPara, 'Ela tem caixinhas próprias e não pode virar caixinha.');
-      // Mesmo id: as transferências já feitas continuam apontando para ela, agora como caixinha.
+      // Mesmo id: transferências e entradas já lançadas nela continuam apontando para ela, agora como caixinha,
+      // e o saldo não muda (saldo e rendimento são calculados pelo id, seja instituição ou caixinha).
       estado.caixinhas.push({
         id: original.id,
         instituicaoId: moverPara,
