@@ -1,6 +1,6 @@
 // Guarda os arquivos do app no celular para abrir sem internet.
 // Ao publicar uma nova versão, aumente o número em VERSAO para os celulares baixarem os arquivos novos.
-const VERSAO = 'financas-v1';
+const VERSAO = 'financas-v2';
 const ARQUIVOS = [
   './',
   'index.html',

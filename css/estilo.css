@@ -153,6 +153,23 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 
 /* ---------- Início ---------- */
 
+.aviso-instalar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--primaria);
+  border-radius: var(--raio);
+  background: var(--superficie);
+}
+
+.aviso-instalar-texto { flex: 1; display: flex; flex-direction: column; }
+.aviso-instalar-texto small { font-size: 0.8rem; color: var(--texto-suave); }
+
+.passos { margin: 0 0 16px; padding-left: 20px; }
+.passos li { margin-bottom: 10px; }
+
 .painel-saldo {
   padding: 20px;
   border-radius: var(--raio);

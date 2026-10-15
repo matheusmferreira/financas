@@ -838,6 +838,33 @@ async function importarBackup(arquivo) {
   renderizarTudo();
 }
 
+// ---------- Instalação ----------
+
+// O navegador só entrega o pedido de instalação (beforeinstallprompt) quando ele mesmo permite instalar;
+// fora disso (navegador dentro do WhatsApp, por exemplo) o botão mostra o passo a passo pelo menu.
+let pedidoDeInstalacao = null;
+const rodandoInstalado = matchMedia('(display-mode: standalone)').matches;
+$('#aviso-instalar').hidden = rodandoInstalado || !location.protocol.startsWith('http');
+
+window.addEventListener('beforeinstallprompt', (evento) => {
+  evento.preventDefault();
+  pedidoDeInstalacao = evento;
+});
+window.addEventListener('appinstalled', () => {
+  $('#aviso-instalar').hidden = true;
+});
+
+$('#botao-instalar').addEventListener('click', async () => {
+  if (!pedidoDeInstalacao) {
+    $('#dialogo-instalar').showModal();
+    return;
+  }
+  pedidoDeInstalacao.prompt();
+  const { outcome } = await pedidoDeInstalacao.userChoice;
+  if (outcome === 'accepted') $('#aviso-instalar').hidden = true;
+  pedidoDeInstalacao = null;
+});
+
 // ---------- Inicialização ----------
 
 $('#mes-anterior').addEventListener('click', () => trocarMes(-1));

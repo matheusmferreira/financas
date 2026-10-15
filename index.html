@@ -23,6 +23,14 @@
 
   <main>
     <section class="tela" id="tela-inicio">
+      <div class="aviso-instalar" id="aviso-instalar" hidden>
+        <div class="aviso-instalar-texto">
+          <strong>Instale o app</strong>
+          <small>Fica na tela inicial e abre sem internet.</small>
+        </div>
+        <button class="botao" id="botao-instalar">Instalar</button>
+      </div>
+
       <div class="painel-saldo">
         <span class="rotulo">Sobra prevista no mês</span>
         <strong class="saldo" id="resumo-saldo">R$ 0,00</strong>
@@ -287,6 +295,20 @@
       <div class="acoes-dialogo">
         <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
         <button class="botao" value="salvar">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-instalar">
+    <form method="dialog">
+      <h3>Como instalar</h3>
+      <ol class="passos">
+        <li>Confira se a página está aberta no <strong>Chrome</strong> ou no <strong>Brave</strong>, e não dentro do WhatsApp ou Instagram. Se estiver, toque em ⋮ e em <strong>"Abrir no Chrome"</strong>.</li>
+        <li>Toque no menu <strong>⋮</strong> do navegador.</li>
+        <li>Escolha <strong>"Instalar app"</strong> ou <strong>"Adicionar à tela inicial"</strong> e confirme em <strong>"Instalar"</strong>.</li>
+      </ol>
+      <div class="acoes-dialogo">
+        <button class="botao" value="cancelar">Entendi</button>
       </div>
     </form>
   </dialog>
