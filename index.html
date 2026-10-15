@@ -32,14 +32,22 @@
       </div>
 
       <div class="painel-saldo">
-        <span class="rotulo">Sobra prevista no mês</span>
-        <strong class="saldo" id="resumo-saldo">R$ 0,00</strong>
+        <span class="rotulo" id="rotulo-pode-gastar">Ainda posso gastar</span>
+        <strong class="saldo" id="resumo-pode-gastar">R$ 0,00</strong>
+        <span class="painel-por-dia" id="resumo-por-dia"></span>
         <div class="painel-saldo-linhas">
           <div><span class="rotulo">Entrou</span><span id="resumo-receitas">R$ 0,00</span></div>
-          <div><span class="rotulo">Saiu</span><span id="resumo-despesas">R$ 0,00</span></div>
-          <div><span class="rotulo">Falta pagar</span><span id="resumo-a-pagar">R$ 0,00</span></div>
+          <div><span class="rotulo">Gastei</span><span id="resumo-gastos">R$ 0,00</span></div>
+          <div><span class="rotulo">Guardar</span><span id="resumo-guardar">R$ 0,00</span></div>
         </div>
       </div>
+
+      <div class="painel-patrimonio">
+        <div><span class="rotulo">Tenho no total</span><strong id="resumo-total">R$ 0,00</strong></div>
+        <div><span class="rotulo">Falta pagar no mês</span><strong id="resumo-a-pagar">R$ 0,00</strong></div>
+      </div>
+
+      <ul class="lista-dicas" id="lista-dicas"></ul>
 
       <h2>Minhas instituições</h2>
       <div class="carrossel" id="lista-saldos-instituicoes"></div>
@@ -51,6 +59,49 @@
       <h2>Orçamento</h2>
       <ul class="lista" id="lista-orcamento"></ul>
       <p class="vazio" id="vazio-orcamento">Coloque um limite mensal nas categorias (em Ajustes) para acompanhar aqui.</p>
+    </section>
+
+    <section class="tela" id="tela-instituicao">
+      <button class="botao-voltar" id="botao-voltar">‹ Voltar ao início</button>
+
+      <div class="painel-instituicao" id="painel-instituicao">
+        <span class="rotulo">Total na instituição</span>
+        <strong class="saldo" id="inst-total">R$ 0,00</strong>
+        <div class="painel-saldo-linhas">
+          <div><span class="rotulo">Entrou no mês</span><span id="inst-entradas">R$ 0,00</span></div>
+          <div><span class="rotulo">Gastou no mês</span><span id="inst-gastos">R$ 0,00</span></div>
+          <div><span class="rotulo">Rendeu no mês</span><span id="inst-rendeu">R$ 0,00</span></div>
+        </div>
+      </div>
+
+      <h2>Conta</h2>
+      <ul class="lista" id="inst-conta"></ul>
+
+      <div class="secao-ajuste-topo"><h2>Caixinhas</h2><button class="botao-link" id="botao-nova-caixinha">Adicionar</button></div>
+      <ul class="lista" id="inst-caixinhas"></ul>
+      <p class="vazio" id="inst-vazio-caixinhas">Nenhuma caixinha. Crie uma para guardar dinheiro rendendo % do CDI.</p>
+      <div class="linha-botoes linha-guardar" id="inst-botoes-caixinha">
+        <button class="botao" id="botao-guardar">Guardar</button>
+        <button class="botao botao-secundario" id="botao-resgatar">Resgatar</button>
+      </div>
+
+      <div id="inst-secao-cartao">
+        <h2>Cartão de crédito</h2>
+        <ul class="lista" id="inst-cartao"></ul>
+      </div>
+
+      <h2>Últimos 6 meses</h2>
+      <div class="legenda-barras">
+        <span><span class="marcador marcador-receita"></span>Entrou</span>
+        <span><span class="marcador marcador-despesa"></span>Gastou</span>
+      </div>
+      <div class="barras-meses" id="inst-barras"></div>
+
+      <h2>Lançamentos do mês</h2>
+      <ul class="lista" id="inst-lancamentos"></ul>
+      <p class="vazio" id="inst-vazio-lancamentos">Nenhum lançamento desta instituição no mês.</p>
+
+      <button class="botao botao-secundario largura-total" id="botao-editar-instituicao">Editar instituição</button>
     </section>
 
     <section class="tela" id="tela-lancamentos">
@@ -78,7 +129,7 @@
       <h2>Últimos 6 meses</h2>
       <div class="legenda-barras">
         <span><span class="marcador marcador-receita"></span>Entrou</span>
-        <span><span class="marcador marcador-despesa"></span>Saiu</span>
+        <span><span class="marcador marcador-despesa"></span>Gastei</span>
       </div>
       <div class="barras-meses" id="barras-meses"></div>
 
@@ -111,8 +162,15 @@
         <ul class="lista" id="lista-instituicoes"></ul>
       </div>
       <div class="secao-ajuste">
+        <h2>Planejamento</h2>
+        <p class="ajuda">Quanto do que entra no mês você quer guardar. O "Ainda posso gastar" do Início já desconta esse valor.</p>
+        <label class="campo">Quero guardar por mês (% do que entra)
+          <input id="campo-guardar" inputmode="decimal" pattern="[0-9.,]*" placeholder="Ex.: 10" autocomplete="off">
+        </label>
+      </div>
+      <div class="secao-ajuste">
         <h2>CDI para o rendimento</h2>
-        <p class="ajuda">Usado nas instituições marcadas com "Rende % do CDI". É uma simulação: valor bruto, antes do imposto de renda.</p>
+        <p class="ajuda">Usado nas caixinhas e nas contas que rendem % do CDI. É uma simulação: valor bruto, antes do imposto de renda.</p>
         <label class="campo">CDI atual (% ao ano)
           <input id="campo-cdi" inputmode="decimal" pattern="[0-9.,]*" placeholder="Ex.: 13,65" autocomplete="off">
         </label>
@@ -215,14 +273,40 @@
         </label>
       </div>
       <label class="campo-check">
-        <input type="checkbox" name="rendeCdi"><span>Rende % do CDI (cofrinho, caixinha)</span>
+        <input type="checkbox" name="rendeCdi"><span>A conta rende % do CDI</span>
       </label>
       <label class="campo" data-somente-cdi>Quantos % do CDI
         <input name="percentualCdi" inputmode="decimal" pattern="[0-9.,]+" value="100" autocomplete="off">
       </label>
+      <label class="campo" data-somente-mover>Na verdade é uma caixinha de…
+        <select name="moverPara"></select>
+      </label>
       <label class="campo">Cor
         <input type="color" name="cor" value="#0f766e">
       </label>
+      <div class="acoes-dialogo">
+        <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
+        <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button class="botao" value="salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-caixinha">
+    <form method="dialog" id="form-caixinha">
+      <h3 data-titulo>Nova caixinha</h3>
+      <label class="campo">Nome
+        <input name="nome" maxlength="30" placeholder="Ex.: Reserva de emergência" required>
+      </label>
+      <div class="linha-campos">
+        <label class="campo">Rende % do CDI
+          <input name="percentualCdi" inputmode="decimal" pattern="[0-9.,]+" value="100" required autocomplete="off">
+        </label>
+        <label class="campo">Já tem (R$)
+          <input name="saldoInicial" inputmode="decimal" pattern="[0-9.,]*" placeholder="0,00" autocomplete="off">
+        </label>
+      </div>
+      <p class="ajuda">Para colocar ou tirar dinheiro, use Guardar e Resgatar na tela da instituição.</p>
       <div class="acoes-dialogo">
         <button class="botao botao-perigo" value="excluir" formnovalidate data-excluir>Excluir</button>
         <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
@@ -352,6 +436,16 @@
       <span class="marcador"></span>
       <span data-campo="nome"></span>
     </label>
+  </template>
+
+  <template id="modelo-dica">
+    <li class="dica">
+      <span class="dica-icone" aria-hidden="true"></span>
+      <span class="dica-texto">
+        <strong data-campo="rotulo"></strong>
+        <span data-campo="texto"></span>
+      </span>
+    </li>
   </template>
 
   <template id="modelo-saldo-instituicao">

@@ -1,7 +1,9 @@
 import {
   formatarMoeda, centavosParaTexto, lerValorEmCentavos, hojeISO, mesDe, somarMeses, dataNoMes, nomeDoMes, nomeDoDia,
-  gerarParcelasDoCartao, chaveFatura, lancamentosDoMes, totalDaFatura, resumoDoMes, saldoDaInstituicao,
+  gerarParcelasDoCartao, chaveFatura, lancamentosDoMes, totalDaFatura, resumoDoMes,
   gastosPorCategoria, lancamentosDasFixas, valorMensalParaMeta, rendimentoDaInstituicao, guardadoNoFimDoMes,
+  gastosDoMes, planoDoMes, dicasDoMes, caixinhasDaInstituicao, saldoComRendimento, totalDaInstituicao, rendeuNoMes,
+  resumoDaInstituicaoNoMes,
 } from './calculos.js';
 
 const CHAVE_ARMAZENAMENTO = 'controle-financeiro:v1';
@@ -21,7 +23,8 @@ const criarId = () => Date.now().toString(36) + Math.random().toString(36).slice
 let estado = carregarEstado();
 let mesVisivel = mesDe(hojeISO());
 let filtroLancamentos = 'todos';
-const emEdicao = { lancamento: null, instituicao: null, fixa: null, categoria: null, meta: null, aporte: null };
+let instituicaoAberta = null;
+const emEdicao = { lancamento: null, instituicao: null, caixinha: null, fixa: null, categoria: null, meta: null, aporte: null };
 
 function estadoInicial() {
   const categoria = (nome, tipo, cor) => ({ id: criarId(), nome, tipo, cor, limite: 0 });
@@ -45,12 +48,21 @@ function estadoInicial() {
     metas: [],
     ultimoPagamento: null,
     cdiAnual: null,
+    caixinhas: [],
+    percentualGuardar: 10,
   };
+}
+
+// Dados salvos antes das caixinhas e da meta de guardar não têm esses campos; completa sem mexer no resto.
+function normalizarEstado(dados) {
+  dados.caixinhas ??= [];
+  dados.percentualGuardar ??= 10;
+  return dados;
 }
 
 function carregarEstado() {
   const salvo = localStorage.getItem(CHAVE_ARMAZENAMENTO);
-  return salvo ? JSON.parse(salvo) : estadoInicial();
+  return salvo ? normalizarEstado(JSON.parse(salvo)) : estadoInicial();
 }
 
 function salvarEstado() {
@@ -59,6 +71,19 @@ function salvarEstado() {
 
 const buscarCategoria = (id) => estado.categorias.find((categoria) => categoria.id === id);
 const buscarInstituicao = (id) => estado.instituicoes.find((instituicao) => instituicao.id === id);
+const buscarCaixinha = (id) => estado.caixinhas.find((caixinha) => caixinha.id === id);
+
+// Lançamentos e transferências apontam para uma instituição ou para uma caixinha pelo mesmo campo.
+function nomeDaConta(id) {
+  const caixinha = buscarCaixinha(id);
+  if (caixinha) return `${buscarInstituicao(caixinha.instituicaoId)?.nome ?? ''} · ${caixinha.nome}`;
+  return buscarInstituicao(id)?.nome ?? '';
+}
+
+function corDaConta(id) {
+  const caixinha = buscarCaixinha(id);
+  return buscarInstituicao(caixinha ? caixinha.instituicaoId : id)?.cor ?? '#64748b';
+}
 
 // ---------- Utilidades de tela ----------
 
@@ -155,31 +180,46 @@ function abrirDialogo(idDialogo, { titulo, editando }) {
 
 // ---------- Navegação ----------
 
-// Aba e mês ficam no endereço (#graficos/2026-11) para recarregar sem voltar ao Início.
-// Abrir pelo ícone usa o endereço sem # e começa no Início do mês atual.
-const TELAS = ['inicio', 'lancamentos', 'graficos', 'metas', 'ajustes'];
+// Aba, mês e instituição aberta ficam no endereço (#graficos/2026-11, #instituicao/2026-11/<id>)
+// para recarregar sem voltar ao Início. Abrir pelo ícone usa o endereço sem # e começa no Início do mês atual.
+const TELAS = ['inicio', 'lancamentos', 'graficos', 'metas', 'ajustes', 'instituicao'];
 
 function guardarNoEndereco() {
-  history.replaceState(null, '', `#${document.body.dataset.tela}/${mesVisivel}`);
+  const tela = document.body.dataset.tela;
+  history.replaceState(null, '', tela === 'instituicao' ? `#${tela}/${mesVisivel}/${instituicaoAberta}` : `#${tela}/${mesVisivel}`);
 }
 
 function lerDoEndereco() {
-  const [tela, mes] = location.hash.slice(1).split('/');
-  return { tela: TELAS.includes(tela) ? tela : 'inicio', mes: /^\d{4}-\d{2}$/.test(mes ?? '') ? mes : null };
+  const [tela, mes, id] = location.hash.slice(1).split('/');
+  const instituicaoValida = tela === 'instituicao' && buscarInstituicao(id);
+  return {
+    tela: TELAS.includes(tela) && (tela !== 'instituicao' || instituicaoValida) ? tela : 'inicio',
+    mes: /^\d{4}-\d{2}$/.test(mes ?? '') ? mes : null,
+    instituicaoId: instituicaoValida ? id : null,
+  };
 }
 
 function trocarTela(nomeTela) {
   document.body.dataset.tela = nomeTela;
   guardarNoEndereco();
+  const abaDestacada = nomeTela === 'instituicao' ? 'inicio' : nomeTela;
   for (const tela of document.querySelectorAll('.tela')) tela.classList.toggle('ativa', tela.id === `tela-${nomeTela}`);
-  for (const aba of document.querySelectorAll('.aba')) aba.classList.toggle('ativa', aba.dataset.tela === nomeTela);
+  for (const aba of document.querySelectorAll('.aba')) aba.classList.toggle('ativa', aba.dataset.tela === abaDestacada);
   atualizarTitulo();
   window.scrollTo(0, 0);
 }
 
+function abrirTelaInstituicao(instituicaoId) {
+  instituicaoAberta = instituicaoId;
+  renderizarInstituicao();
+  trocarTela('instituicao');
+}
+
 function atualizarTitulo() {
   const titulos = { metas: 'Metas', ajustes: 'Ajustes' };
-  $('#titulo-topo').textContent = titulos[document.body.dataset.tela] ?? nomeDoMes(mesVisivel);
+  const tela = document.body.dataset.tela;
+  const titulo = tela === 'instituicao' ? `${buscarInstituicao(instituicaoAberta)?.nome} · ${nomeDoMes(mesVisivel, { curto: true })}` : titulos[tela];
+  $('#titulo-topo').textContent = titulo ?? nomeDoMes(mesVisivel);
 }
 
 function trocarMes(quantidade) {
@@ -202,21 +242,43 @@ function gerarContasFixasDoMes() {
 
 function renderizarTudo() {
   gerarContasFixasDoMes();
+  guardarNoEndereco();
   atualizarTitulo();
   renderizarInicio();
+  renderizarInstituicao();
   renderizarLancamentos();
   renderizarGraficos();
   renderizarMetas();
   renderizarAjustes();
 }
 
+const ROTULOS_DE_DICA = { alerta: 'Alerta', atencao: 'Atenção', dica: 'Dica' };
+const DICAS_NO_INICIO = 3;
+
 function renderizarInicio() {
-  const resumo = resumoDoMes(estado, mesVisivel);
-  $('#resumo-saldo').textContent = formatarMoeda(resumo.saldo);
-  $('#resumo-saldo').classList.toggle('negativo', resumo.saldo < 0);
-  $('#resumo-receitas').textContent = formatarMoeda(resumo.receitas);
-  $('#resumo-despesas').textContent = formatarMoeda(resumo.despesas);
-  $('#resumo-a-pagar').textContent = formatarMoeda(resumo.aPagar);
+  const hoje = hojeISO();
+  const plano = planoDoMes(estado, mesVisivel, hoje);
+  const passou = plano.podeGastar < 0;
+  $('#rotulo-pode-gastar').textContent = passou ? 'Passou do planejado' : 'Ainda posso gastar';
+  $('#resumo-pode-gastar').textContent = formatarMoeda(Math.abs(plano.podeGastar));
+  $('#resumo-pode-gastar').classList.toggle('negativo', passou);
+  $('#resumo-por-dia').textContent = plano.porDia !== null
+    ? `${formatarMoeda(plano.porDia)} por dia nos ${plano.diasRestantes} dias que faltam`
+    : '';
+  $('#resumo-receitas').textContent = formatarMoeda(plano.entradas);
+  $('#resumo-gastos').textContent = formatarMoeda(plano.gastos);
+  $('#resumo-guardar').textContent = `${formatarMoeda(Math.max(0, plano.guardado))} de ${formatarMoeda(plano.metaGuardar)}`;
+  $('#resumo-total').textContent = formatarMoeda(estado.instituicoes.reduce((soma, i) => soma + totalDaInstituicao(estado, i, hoje), 0));
+  $('#resumo-a-pagar').textContent = formatarMoeda(resumoDoMes(estado, mesVisivel).aPagar);
+
+  const listaDicas = $('#lista-dicas');
+  listaDicas.replaceChildren();
+  for (const { nivel, texto } of dicasDoMes(estado, mesVisivel, hoje).slice(0, DICAS_NO_INICIO)) {
+    const item = clonarModelo('modelo-dica');
+    item.classList.add(nivel === 'dica' ? 'dica-geral' : nivel);
+    preencher(item, { rotulo: ROTULOS_DE_DICA[nivel], texto });
+    listaDicas.append(item);
+  }
 
   renderizarSaldosDasInstituicoes();
   renderizarContasDoMes();
@@ -228,19 +290,19 @@ function renderizarSaldosDasInstituicoes() {
   lista.replaceChildren();
   for (const instituicao of estado.instituicoes) {
     const cartao = clonarModelo('modelo-saldo-instituicao');
-    const rendimento = rendimentoDaInstituicao(estado, instituicao, hojeISO());
-    const saldo = saldoDaInstituicao(estado, instituicao) + rendimento;
+    const total = totalDaInstituicao(estado, instituicao, hojeISO());
+    const quantidadeDeCaixinhas = caixinhasDaInstituicao(estado, instituicao.id).length;
     const detalhes = [];
-    if (instituicao.temCartao) detalhes.push(`Fatura: ${formatarMoeda(totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel))}`);
-    if (instituicao.percentualCdi) detalhes.push(estado.cdiAnual ? `Rendeu ${formatarMoeda(rendimento)}` : 'Informe o CDI em Ajustes');
+    if (instituicao.temCartao) detalhes.push(`Fatura ${formatarMoeda(totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel))}`);
+    if (quantidadeDeCaixinhas > 0) detalhes.push(`${quantidadeDeCaixinhas} caixinha${quantidadeDeCaixinhas > 1 ? 's' : ''}`);
     pintarMarcador(cartao, instituicao.cor);
     preencher(cartao, {
       nome: instituicao.nome,
-      saldo: formatarMoeda(saldo),
+      saldo: formatarMoeda(total),
       detalhe: detalhes.join(' · ') || 'Saldo atual',
     });
-    cartao.querySelector('[data-campo="saldo"]').classList.toggle('negativo', saldo < 0);
-    cartao.addEventListener('click', () => abrirInstituicao(instituicao));
+    cartao.querySelector('[data-campo="saldo"]').classList.toggle('negativo', total < 0);
+    cartao.addEventListener('click', () => abrirTelaInstituicao(instituicao.id));
     lista.append(cartao);
   }
   const botaoAdicionar = document.createElement('button');
@@ -259,10 +321,9 @@ function renderizarContasDoMes() {
     .sort((a, b) => a.data.localeCompare(b.data));
   for (const lancamento of contas) {
     const item = clonarModelo('modelo-conta-do-mes');
-    const instituicao = buscarInstituicao(lancamento.instituicaoId);
     preencher(item, {
       titulo: lancamento.descricao,
-      detalhe: `Dia ${Number(lancamento.data.slice(8))} · ${instituicao?.nome ?? ''}`,
+      detalhe: `Dia ${Number(lancamento.data.slice(8))} · ${nomeDaConta(lancamento.instituicaoId)}`,
       valor: valorComSinal(lancamento),
     });
     item.classList.toggle('pago', lancamento.pago);
@@ -324,11 +385,11 @@ function renderizarOrcamento() {
 
 function detalheDoLancamento(lancamento) {
   if (lancamento.tipo === 'transferencia') {
-    return `${buscarInstituicao(lancamento.instituicaoId)?.nome ?? ''} → ${buscarInstituicao(lancamento.destinoId)?.nome ?? ''}`;
+    return `${nomeDaConta(lancamento.instituicaoId)} → ${nomeDaConta(lancamento.destinoId)}`;
   }
   const partes = [buscarCategoria(lancamento.categoriaId)?.nome ?? 'Sem categoria'];
-  const instituicao = buscarInstituicao(lancamento.instituicaoId);
-  if (instituicao) partes.push(lancamento.credito ? `${instituicao.nome} crédito` : instituicao.nome);
+  const conta = nomeDaConta(lancamento.instituicaoId);
+  if (conta) partes.push(lancamento.credito ? `${conta} crédito` : conta);
   if (lancamento.compra?.parcelas > 1) partes.push(`${lancamento.compra.numero}/${lancamento.compra.parcelas}`);
   if (!lancamento.credito && !lancamento.pago) partes.push(lancamento.tipo === 'receita' ? 'a receber' : 'a pagar');
   return partes.join(' · ');
@@ -354,14 +415,95 @@ function renderizarLancamentos() {
       lista.append(cabecalho);
       diaAnterior = lancamento.data;
     }
-    const item = clonarModelo('modelo-item');
-    pintarMarcador(item, buscarCategoria(lancamento.categoriaId)?.cor ?? '#64748b');
-    preencher(item, { titulo: lancamento.descricao, detalhe: detalheDoLancamento(lancamento), valor: valorComSinal(lancamento) });
-    item.querySelector('.item-valor').classList.toggle('positivo', lancamento.tipo === 'receita');
-    item.addEventListener('click', () => abrirLancamento(lancamento));
-    lista.append(item);
+    lista.append(itemDeLancamento(lancamento));
   }
   $('#vazio-lancamentos').hidden = filtrados.length > 0;
+}
+
+function itemDeLancamento(lancamento) {
+  const item = clonarModelo('modelo-item');
+  pintarMarcador(item, buscarCategoria(lancamento.categoriaId)?.cor ?? '#64748b');
+  preencher(item, { titulo: lancamento.descricao, detalhe: detalheDoLancamento(lancamento), valor: valorComSinal(lancamento) });
+  item.querySelector('.item-valor').classList.toggle('positivo', lancamento.tipo === 'receita');
+  item.addEventListener('click', () => abrirLancamento(lancamento));
+  return item;
+}
+
+// ---------- Tela da instituição ----------
+
+function renderizarInstituicao() {
+  const instituicao = buscarInstituicao(instituicaoAberta);
+  if (!instituicao) {
+    if (document.body.dataset.tela === 'instituicao') trocarTela('inicio');
+    return;
+  }
+  const hoje = hojeISO();
+  const caixinhas = caixinhasDaInstituicao(estado, instituicao.id);
+  const resumo = resumoDaInstituicaoNoMes(estado, instituicao.id, mesVisivel);
+  $('#painel-instituicao').style.setProperty('--cor', instituicao.cor);
+  $('#inst-total').textContent = formatarMoeda(totalDaInstituicao(estado, instituicao, hoje));
+  $('#inst-entradas').textContent = formatarMoeda(resumo.entradas);
+  $('#inst-gastos').textContent = formatarMoeda(resumo.gastos);
+  $('#inst-rendeu').textContent = formatarMoeda(rendeuNoMes(estado, [instituicao, ...caixinhas], mesVisivel, hoje));
+
+  const rendimentoDaConta = rendimentoDaInstituicao(estado, instituicao, hoje);
+  renderizarListaDeAjustes('#inst-conta', [{
+    titulo: 'Saldo da conta',
+    detalhe: instituicao.percentualCdi
+      ? `Rende ${String(instituicao.percentualCdi).replace('.', ',')}% do CDI · rendeu ${formatarMoeda(rendimentoDaConta)}`
+      : 'Débito, Pix e transferências',
+    valor: formatarMoeda(saldoComRendimento(estado, instituicao, hoje)),
+    cor: instituicao.cor,
+    origem: instituicao,
+  }], abrirInstituicao);
+
+  renderizarListaDeAjustes('#inst-caixinhas', caixinhas.map((caixinha) => ({
+    titulo: caixinha.nome,
+    detalhe: `${String(caixinha.percentualCdi).replace('.', ',')}% do CDI · rendeu ${formatarMoeda(rendimentoDaInstituicao(estado, caixinha, hoje))}`,
+    valor: formatarMoeda(saldoComRendimento(estado, caixinha, hoje)),
+    cor: 'var(--rendimento)',
+    origem: caixinha,
+  })), abrirCaixinha);
+  $('#inst-vazio-caixinhas').hidden = caixinhas.length > 0;
+  $('#inst-botoes-caixinha').hidden = caixinhas.length === 0;
+
+  $('#inst-secao-cartao').hidden = !instituicao.temCartao;
+  if (instituicao.temCartao) {
+    const chave = chaveFatura(instituicao.id, mesVisivel);
+    renderizarListaDeAjustes('#inst-cartao', [{
+      titulo: `Fatura de ${nomeDoMes(mesVisivel, { curto: true })}`,
+      detalhe: `Fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento} · ${estado.faturasPagas.includes(chave) ? 'paga' : 'em aberto'}`,
+      valor: formatarMoeda(totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel)),
+      cor: instituicao.cor,
+      origem: null,
+    }], () => {
+      filtroLancamentos = 'credito';
+      trocarTela('lancamentos');
+      renderizarLancamentos();
+    });
+  }
+
+  const barras = $('#inst-barras');
+  barras.replaceChildren();
+  const meses = Array.from({ length: 6 }, (_, indice) => somarMeses(mesVisivel, indice - 5));
+  const resumos = meses.map((mes) => resumoDaInstituicaoNoMes(estado, instituicao.id, mes));
+  const maior = Math.max(1, ...resumos.flatMap((r) => [r.entradas, r.gastos]));
+  meses.forEach((mes, indice) => {
+    const barra = clonarModelo('modelo-barra-mes');
+    barra.querySelector('.coluna-receita').style.setProperty('--altura', `${(resumos[indice].entradas / maior) * 100}%`);
+    barra.querySelector('.coluna-despesa').style.setProperty('--altura', `${(resumos[indice].gastos / maior) * 100}%`);
+    preencher(barra, { mes: nomeDoMes(mes, { curto: true }) });
+    barra.classList.toggle('atual', mes === mesVisivel);
+    barras.append(barra);
+  });
+
+  const idsDaInstituicao = new Set([instituicao.id, ...caixinhas.map((caixinha) => caixinha.id)]);
+  const lancamentos = lancamentosDoMes(estado.lancamentos, mesVisivel)
+    .filter((l) => idsDaInstituicao.has(l.instituicaoId) || idsDaInstituicao.has(l.destinoId))
+    .sort((a, b) => b.data.localeCompare(a.data));
+  const lista = $('#inst-lancamentos');
+  lista.replaceChildren(...lancamentos.map(itemDeLancamento));
+  $('#inst-vazio-lancamentos').hidden = lancamentos.length > 0;
 }
 
 function renderizarGraficos() {
@@ -403,12 +545,12 @@ function renderizarGraficos() {
   const barras = $('#barras-meses');
   barras.replaceChildren();
   const meses = Array.from({ length: 6 }, (_, indice) => somarMeses(mesVisivel, indice - 5));
-  const resumos = meses.map((mes) => resumoDoMes(estado, mes));
-  const maior = Math.max(1, ...resumos.flatMap((resumo) => [resumo.receitas, resumo.despesas]));
+  const resumos = meses.map((mes) => ({ receitas: resumoDoMes(estado, mes).receitas, gastos: gastosDoMes(estado.lancamentos, mes) }));
+  const maior = Math.max(1, ...resumos.flatMap((resumo) => [resumo.receitas, resumo.gastos]));
   meses.forEach((mes, indice) => {
     const barra = clonarModelo('modelo-barra-mes');
     barra.querySelector('.coluna-receita').style.setProperty('--altura', `${(resumos[indice].receitas / maior) * 100}%`);
-    barra.querySelector('.coluna-despesa').style.setProperty('--altura', `${(resumos[indice].despesas / maior) * 100}%`);
+    barra.querySelector('.coluna-despesa').style.setProperty('--altura', `${(resumos[indice].gastos / maior) * 100}%`);
     preencher(barra, { mes: nomeDoMes(mes, { curto: true }) });
     barra.classList.toggle('atual', mes === mesVisivel);
     barras.append(barra);
@@ -418,7 +560,7 @@ function renderizarGraficos() {
 }
 
 function renderizarGuardado(meses) {
-  const temCofrinho = estado.instituicoes.some((instituicao) => instituicao.percentualCdi);
+  const temCofrinho = estado.caixinhas.length > 0 || estado.instituicoes.some((instituicao) => instituicao.percentualCdi);
   $('#secao-guardado').hidden = !temCofrinho;
   if (!temCofrinho) return;
 
@@ -503,17 +645,20 @@ function renderizarAjustes() {
       instituicao.temCartao ? `Cartão: fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento}` : null,
       !instituicao.temCartao && !instituicao.percentualCdi ? 'Sem cartão' : null,
       instituicao.percentualCdi ? `Rende ${String(instituicao.percentualCdi).replace('.', ',')}% do CDI` : null,
+      caixinhasDaInstituicao(estado, instituicao.id).length ? `${caixinhasDaInstituicao(estado, instituicao.id).length} caixinha(s)` : null,
     ].filter(Boolean).join(' · '),
     cor: instituicao.cor,
     origem: instituicao,
-  })), abrirInstituicao);
+  })), (instituicao) => abrirTelaInstituicao(instituicao.id));
 
   const campoCdi = $('#campo-cdi');
   if (document.activeElement !== campoCdi) campoCdi.value = estado.cdiAnual ? String(estado.cdiAnual).replace('.', ',') : '';
+  const campoGuardar = $('#campo-guardar');
+  if (document.activeElement !== campoGuardar) campoGuardar.value = String(estado.percentualGuardar).replace('.', ',');
 
   renderizarListaDeAjustes('#lista-fixas', estado.fixas.map((fixa) => ({
     titulo: fixa.descricao,
-    detalhe: `Todo dia ${fixa.dia} · ${buscarInstituicao(fixa.instituicaoId)?.nome ?? ''}`,
+    detalhe: `Todo dia ${fixa.dia} · ${nomeDaConta(fixa.instituicaoId)}`,
     valor: `${fixa.tipo === 'receita' ? '+' : '−'} ${formatarMoeda(fixa.valor)}`,
     cor: buscarCategoria(fixa.categoriaId)?.cor ?? '#64748b',
     origem: fixa,
@@ -532,12 +677,18 @@ function renderizarAjustes() {
 
 const formLancamento = $('#form-lancamento');
 
+// Caixinha só aparece em transferência: gastar ou receber direto nela não é como os bancos funcionam.
 function opcoesDePagamento(tipo) {
   const opcoes = [];
   for (const instituicao of estado.instituicoes) {
     opcoes.push({ valor: `${instituicao.id}|conta`, nome: instituicao.nome, cor: instituicao.cor });
     if (tipo === 'despesa' && instituicao.temCartao) {
       opcoes.push({ valor: `${instituicao.id}|credito`, nome: `${instituicao.nome} crédito`, cor: instituicao.cor });
+    }
+    if (tipo === 'transferencia') {
+      for (const caixinha of caixinhasDaInstituicao(estado, instituicao.id)) {
+        opcoes.push({ valor: `${caixinha.id}|conta`, nome: nomeDaConta(caixinha.id), cor: instituicao.cor });
+      }
     }
   }
   return opcoes;
@@ -554,8 +705,12 @@ function atualizarFormLancamento({ categoriaId, pagamento, destinoId } = {}) {
   const pagamentoValido = opcoesPagamento.some((opcao) => opcao.valor === pagamentoAtual) ? pagamentoAtual : opcoesPagamento[0]?.valor;
   montarChips(formLancamento.querySelector('[data-chips="pagamento"]'), 'pagamento', opcoesPagamento, pagamentoValido);
 
-  // O destino não pode ser a própria instituição de origem.
-  const opcoesDestino = transferencia ? opcoesDeInstituicao().filter((opcao) => `${opcao.valor}|conta` !== pagamentoValido) : [];
+  // O destino não pode ser a própria conta de origem.
+  const opcoesDestino = transferencia
+    ? opcoesDePagamento('transferencia')
+      .map((opcao) => ({ ...opcao, valor: opcao.valor.replace('|conta', '') }))
+      .filter((opcao) => `${opcao.valor}|conta` !== pagamentoValido)
+    : [];
   const destinoValido = opcoesDestino.some((opcao) => opcao.valor === destinoAtual) ? destinoAtual : opcoesDestino[0]?.valor;
   montarChips(formLancamento.querySelector('[data-chips="destinoId"]'), 'destinoId', opcoesDestino, destinoValido);
 
@@ -576,10 +731,11 @@ function atualizarCamposDeCredito() {
   formLancamento.querySelector('[data-sem-credito]').hidden = credito || transferencia;
 }
 
-function abrirLancamento(lancamento) {
+// preenchimento: tipo, pagamento e destino já escolhidos (ex.: botão Guardar abre a transferência conta → caixinha).
+function abrirLancamento(lancamento, preenchimento = {}) {
   emEdicao.lancamento = lancamento;
   formLancamento.reset();
-  const tipo = lancamento?.tipo ?? 'despesa';
+  const tipo = lancamento?.tipo ?? preenchimento.tipo ?? 'despesa';
   marcarTipo(formLancamento, tipo);
   if (lancamento) {
     const compra = lancamento.compra;
@@ -594,8 +750,8 @@ function abrirLancamento(lancamento) {
   }
   atualizarFormLancamento({
     categoriaId: lancamento?.categoriaId ?? null,
-    pagamento: lancamento ? `${lancamento.instituicaoId}|${lancamento.credito ? 'credito' : 'conta'}` : estado.ultimoPagamento,
-    destinoId: lancamento?.destinoId ?? null,
+    pagamento: lancamento ? `${lancamento.instituicaoId}|${lancamento.credito ? 'credito' : 'conta'}` : (preenchimento.pagamento ?? estado.ultimoPagamento),
+    destinoId: lancamento?.destinoId ?? preenchimento.destinoId ?? null,
   });
   abrirDialogo('dialogo-lancamento', { editando: Boolean(lancamento) });
   if (!lancamento) formLancamento.valor.focus();
@@ -685,6 +841,11 @@ const formInstituicao = $('#form-instituicao');
 function atualizarCamposDeCartao() {
   formInstituicao.querySelector('[data-somente-cartao]').hidden = !formInstituicao.temCartao.checked;
   formInstituicao.querySelector('[data-somente-cdi]').hidden = !formInstituicao.rendeCdi.checked;
+  // Mover para dentro de outra só faz sentido para quem foi criada como "instituição" mas é uma caixinha: rende e não tem cartão.
+  const podeVirarCaixinha = Boolean(emEdicao.instituicao) && formInstituicao.moverPara.options.length > 1
+    && formInstituicao.rendeCdi.checked && !formInstituicao.temCartao.checked;
+  formInstituicao.querySelector('[data-somente-mover]').hidden = !podeVirarCaixinha;
+  if (!podeVirarCaixinha) formInstituicao.moverPara.value = '';
 }
 
 // Aceita "13,65" ou "13.65"; null para vazio ou inválido.
@@ -696,6 +857,9 @@ function lerPercentual(texto) {
 function abrirInstituicao(instituicao) {
   emEdicao.instituicao = instituicao;
   formInstituicao.reset();
+  const nenhuma = new Option('Não, é uma instituição', '');
+  const outras = estado.instituicoes.filter((outra) => outra !== instituicao).map((outra) => new Option(outra.nome, outra.id));
+  formInstituicao.moverPara.replaceChildren(nenhuma, ...outras);
   if (instituicao) {
     formInstituicao.nome.value = instituicao.nome;
     formInstituicao.saldoInicial.value = centavosParaTexto(instituicao.saldoInicial);
@@ -712,6 +876,20 @@ function abrirInstituicao(instituicao) {
 
 formInstituicao.temCartao.addEventListener('change', atualizarCamposDeCartao);
 formInstituicao.rendeCdi.addEventListener('change', atualizarCamposDeCartao);
+
+$('#campo-guardar').addEventListener('change', (evento) => {
+  const texto = evento.target.value.trim();
+  const percentual = texto === '' ? 0 : lerPercentual(texto);
+  if (percentual === null || percentual > 100) {
+    evento.target.setCustomValidity('Informe um percentual de 0 a 100, ex.: 10.');
+    evento.target.reportValidity();
+    return;
+  }
+  evento.target.setCustomValidity('');
+  estado.percentualGuardar = percentual;
+  salvarEstado();
+  renderizarTudo();
+});
 
 $('#campo-cdi').addEventListener('change', (evento) => {
   const texto = evento.target.value.trim();
@@ -750,6 +928,26 @@ ligarDialogo('dialogo-instituicao', {
     if (original?.temCartao && !temCartao && estado.lancamentos.some((l) => l.credito && l.instituicaoId === original.id)) {
       return falharCampo(form.temCartao, 'Há compras no crédito desta instituição. Exclua-as antes de tirar o cartão.');
     }
+
+    const moverPara = dados.get('moverPara');
+    if (original && moverPara) {
+      const usadaFora = estado.lancamentos.some((l) => l.tipo !== 'transferencia' && l.instituicaoId === original.id)
+        || estado.fixas.some((f) => f.instituicaoId === original.id);
+      if (usadaFora) return falharCampo(form.moverPara, 'Ela tem gastos, entradas ou contas fixas próprias. Caixinha só recebe transferências.');
+      if (caixinhasDaInstituicao(estado, original.id).length) return falharCampo(form.moverPara, 'Ela tem caixinhas próprias e não pode virar caixinha.');
+      // Mesmo id: as transferências já feitas continuam apontando para ela, agora como caixinha.
+      estado.caixinhas.push({
+        id: original.id,
+        instituicaoId: moverPara,
+        nome: dados.get('nome').trim(),
+        percentualCdi,
+        saldoInicial,
+        rendeDesde: original.rendeDesde ?? hojeISO(),
+      });
+      estado.instituicoes = estado.instituicoes.filter((i) => i.id !== original.id);
+      if (instituicaoAberta === original.id) instituicaoAberta = moverPara;
+      return null;
+    }
     const dadosInstituicao = {
       nome: dados.get('nome').trim(),
       cor: dados.get('cor'),
@@ -768,9 +966,10 @@ ligarDialogo('dialogo-instituicao', {
   aoExcluir() {
     const instituicao = emEdicao.instituicao;
     const emUso = estado.lancamentos.some((l) => l.instituicaoId === instituicao.id || l.destinoId === instituicao.id)
-      || estado.fixas.some((f) => f.instituicaoId === instituicao.id);
+      || estado.fixas.some((f) => f.instituicaoId === instituicao.id)
+      || caixinhasDaInstituicao(estado, instituicao.id).length > 0;
     if (emUso) {
-      alert('Esta instituição tem lançamentos ou contas fixas. Exclua ou mude esses itens antes.');
+      alert('Esta instituição tem lançamentos, contas fixas ou caixinhas. Exclua ou mude esses itens antes.');
       return false;
     }
     if (!confirm(`Excluir ${instituicao.nome}?`)) return false;
@@ -778,6 +977,51 @@ ligarDialogo('dialogo-instituicao', {
     return true;
   },
 });
+
+// ---------- Caixinha ----------
+
+const formCaixinha = $('#form-caixinha');
+
+function abrirCaixinha(caixinha) {
+  emEdicao.caixinha = caixinha;
+  formCaixinha.reset();
+  if (caixinha) {
+    formCaixinha.nome.value = caixinha.nome;
+    formCaixinha.percentualCdi.value = String(caixinha.percentualCdi).replace('.', ',');
+    formCaixinha.saldoInicial.value = caixinha.saldoInicial ? centavosParaTexto(caixinha.saldoInicial) : '';
+  }
+  abrirDialogo('dialogo-caixinha', { titulo: caixinha ? 'Editar caixinha' : 'Nova caixinha', editando: Boolean(caixinha) });
+}
+
+ligarDialogo('dialogo-caixinha', {
+  aoSalvar(dados, form) {
+    const percentualCdi = lerPercentual(dados.get('percentualCdi'));
+    if (!(percentualCdi !== null && percentualCdi <= 300)) return falharCampo(form.percentualCdi, 'Informe o % do CDI, ex.: 100.');
+    const saldoInicial = dados.get('saldoInicial').trim() === '' ? 0 : lerValorEmCentavos(dados.get('saldoInicial'));
+    if (saldoInicial === null) return falharCampo(form.saldoInicial, 'Valor inválido.');
+    const dadosCaixinha = { nome: dados.get('nome').trim(), percentualCdi, saldoInicial };
+    if (emEdicao.caixinha) Object.assign(emEdicao.caixinha, dadosCaixinha);
+    else estado.caixinhas.push({ id: criarId(), instituicaoId: instituicaoAberta, rendeDesde: hojeISO(), ...dadosCaixinha });
+    return null;
+  },
+  aoExcluir() {
+    const caixinha = emEdicao.caixinha;
+    if (estado.lancamentos.some((l) => l.instituicaoId === caixinha.id || l.destinoId === caixinha.id)) {
+      alert('Esta caixinha tem transferências. Resgate o dinheiro e exclua as transferências antes.');
+      return false;
+    }
+    if (!confirm(`Excluir a caixinha ${caixinha.nome}?`)) return false;
+    estado.caixinhas = estado.caixinhas.filter((c) => c.id !== caixinha.id);
+    return true;
+  },
+});
+
+function guardarOuResgatar(guardar) {
+  const [primeiraCaixinha] = caixinhasDaInstituicao(estado, instituicaoAberta);
+  abrirLancamento(null, guardar
+    ? { tipo: 'transferencia', pagamento: `${instituicaoAberta}|conta`, destinoId: primeiraCaixinha.id }
+    : { tipo: 'transferencia', pagamento: `${primeiraCaixinha.id}|conta`, destinoId: instituicaoAberta });
+}
 
 // ---------- Conta fixa ----------
 
@@ -974,7 +1218,7 @@ async function importarBackup(arquivo) {
     return;
   }
   if (!confirm('Importar vai substituir todos os dados atuais deste celular. Continuar?')) return;
-  estado = dados;
+  estado = normalizarEstado(dados);
   salvarEstado();
   renderizarTudo();
 }
@@ -1027,7 +1271,14 @@ document.addEventListener('visibilitychange', () => {
 
 $('#mes-anterior').addEventListener('click', () => trocarMes(-1));
 $('#mes-seguinte').addEventListener('click', () => trocarMes(1));
-$('#botao-novo-lancamento').addEventListener('click', () => abrirLancamento(null));
+// Dentro de uma instituição, o + já vem com ela escolhida.
+$('#botao-novo-lancamento').addEventListener('click', () => abrirLancamento(null,
+  document.body.dataset.tela === 'instituicao' ? { pagamento: `${instituicaoAberta}|conta` } : {}));
+$('#botao-voltar').addEventListener('click', () => trocarTela('inicio'));
+$('#botao-editar-instituicao').addEventListener('click', () => abrirInstituicao(buscarInstituicao(instituicaoAberta)));
+$('#botao-nova-caixinha').addEventListener('click', () => abrirCaixinha(null));
+$('#botao-guardar').addEventListener('click', () => guardarOuResgatar(true));
+$('#botao-resgatar').addEventListener('click', () => guardarOuResgatar(false));
 $('#botao-nova-instituicao').addEventListener('click', () => abrirInstituicao(null));
 $('#botao-nova-fixa').addEventListener('click', () => abrirFixa(null));
 $('#botao-nova-categoria').addEventListener('click', () => abrirCategoria(null));
@@ -1060,5 +1311,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 
 const enderecoInicial = lerDoEndereco();
 if (enderecoInicial.mes) mesVisivel = enderecoInicial.mes;
+instituicaoAberta = enderecoInicial.instituicaoId;
 trocarTela(enderecoInicial.tela);
 renderizarTudo();

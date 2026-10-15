@@ -191,6 +191,84 @@ body[data-tela="ajustes"] .botao-novo { display: none; }
 
 .painel-saldo-linhas div { display: flex; flex-direction: column; font-weight: 600; font-size: 0.92rem; }
 
+.painel-saldo .saldo:has(+ .painel-por-dia:not(:empty)) { margin-bottom: 0; }
+.painel-por-dia { display: block; margin-bottom: 16px; font-size: 0.9rem; font-weight: 600; opacity: 0.85; }
+.painel-por-dia:empty { display: none; }
+
+.painel-patrimonio {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border-radius: var(--raio);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.painel-patrimonio div { display: flex; flex-direction: column; }
+.painel-patrimonio strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+/* Dicas: cor de status sempre acompanhada de ícone e rótulo, nunca só a cor. */
+.lista-dicas { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.lista-dicas:empty { display: none; }
+
+.dica {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--cor-dica);
+  border-radius: 12px;
+  background: var(--superficie);
+  font-size: 0.88rem;
+  box-shadow: var(--sombra);
+}
+
+.dica-icone {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--cor-dica);
+  color: var(--superficie);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.dica-texto { display: flex; flex-direction: column; gap: 2px; }
+.dica-texto strong { font-size: 0.78rem; }
+.dica.alerta { --cor-dica: var(--negativo); }
+.dica.alerta .dica-icone::after { content: "!"; }
+.dica.atencao { --cor-dica: var(--alerta); }
+.dica.atencao .dica-icone::after { content: "!"; }
+.dica.dica-geral { --cor-dica: var(--primaria); }
+.dica.dica-geral .dica-icone::after { content: "i"; }
+
+/* ---------- Tela da instituição ---------- */
+
+.botao-voltar {
+  margin: 0 0 10px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--primaria);
+  font-weight: 650;
+}
+
+.painel-instituicao {
+  padding: 18px 20px;
+  border-left: 6px solid var(--cor, var(--primaria));
+  border-radius: var(--raio);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.painel-instituicao .saldo { display: block; margin: 2px 0 14px; font-size: 1.8rem; font-weight: 750; letter-spacing: -0.02em; }
+.linha-guardar { margin-top: 10px; }
+#tela-instituicao > .largura-total { margin-top: 24px; }
+
 .carrossel {
   display: flex;
   gap: 10px;

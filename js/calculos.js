@@ -184,25 +184,198 @@ export function rendimentoDaInstituicao(estado, instituicao, hoje) {
   return rendimentoDosMovimentos(estado, instituicao, movimentosQueRendem(estado, instituicao), hoje);
 }
 
-// Quanto estava guardado nas instituições que rendem no último dia do mês: o que foi depositado (líquido de resgates)
-// e o rendimento acumulado até ali. Mês futuro vira previsão: lançamentos já agendados + rendimento até o fim dele.
-// O mês atual para em hoje, para bater com o saldo mostrado no Início.
+// Contas que rendem: caixinhas e instituições cuja própria conta rende % do CDI.
+// Caixinha usa o mesmo formato de conta ({ id, saldoInicial, percentualCdi, rendeDesde }), então saldo e rendimento
+// são calculados pelas mesmas funções; lançamentos apontam para ela pelo id, como para uma instituição.
+function contasQueRendem(estado) {
+  return [...estado.instituicoes.filter((instituicao) => instituicao.percentualCdi), ...estado.caixinhas];
+}
+
+// Último dia considerado no mês: o mês atual para em hoje, para bater com os saldos do Início;
+// mês futuro vira previsão até o fim dele.
+function limiteDoMes(mes, hoje) {
+  return mes === mesDe(hoje) ? hoje : dataNoMes(mes, 31);
+}
+
+// Quanto estava guardado no fim do mês: o que foi depositado (líquido de resgates) e o rendimento acumulado até ali.
 export function guardadoNoFimDoMes(estado, mes, hoje) {
-  const fimDoMes = mes === mesDe(hoje) ? hoje : dataNoMes(mes, 31);
+  const fimDoMes = limiteDoMes(mes, hoje);
   let depositado = 0;
   let rendimento = 0;
-  for (const instituicao of estado.instituicoes.filter((i) => i.percentualCdi)) {
-    const movimentos = movimentosQueRendem(estado, instituicao).filter((movimento) => movimento.data <= fimDoMes);
+  for (const conta of contasQueRendem(estado)) {
+    const movimentos = movimentosQueRendem(estado, conta).filter((movimento) => movimento.data <= fimDoMes);
     depositado += movimentos.reduce((soma, movimento) => soma + movimento.valor, 0);
-    rendimento += rendimentoDosMovimentos(estado, instituicao, movimentos, fimDoMes);
+    rendimento += rendimentoDosMovimentos(estado, conta, movimentos, fimDoMes);
   }
   return { depositado, rendimento };
 }
 
+export function caixinhasDaInstituicao(estado, instituicaoId) {
+  return estado.caixinhas.filter((caixinha) => caixinha.instituicaoId === instituicaoId);
+}
+
+export function saldoComRendimento(estado, conta, ate) {
+  return saldoDaInstituicao(estado, conta) + rendimentoDaInstituicao(estado, conta, ate);
+}
+
+// Tudo o que a pessoa tem na instituição: a conta (com rendimento, se render) e as caixinhas dela.
+export function totalDaInstituicao(estado, instituicao, hoje) {
+  return [instituicao, ...caixinhasDaInstituicao(estado, instituicao.id)]
+    .reduce((soma, conta) => soma + saldoComRendimento(estado, conta, hoje), 0);
+}
+
+export function rendeuNoMes(estado, contas, mes, hoje) {
+  const fim = limiteDoMes(mes, hoje);
+  const inicio = dataNoMes(somarMeses(mes, -1), 31);
+  return contas.reduce((soma, conta) => soma + rendimentoDaInstituicao(estado, conta, fim) - rendimentoDaInstituicao(estado, conta, inicio), 0);
+}
+
+export function resumoDaInstituicaoNoMes(estado, instituicaoId, mes) {
+  const entradas = lancamentosDoMes(estado.lancamentos, mes)
+    .filter((lancamento) => lancamento.tipo === 'receita' && lancamento.instituicaoId === instituicaoId)
+    .reduce((soma, lancamento) => soma + lancamento.valor, 0);
+  const gastos = despesasDoMesPorCompetencia(estado.lancamentos, mes)
+    .filter((lancamento) => lancamento.instituicaoId === instituicaoId)
+    .reduce((soma, lancamento) => soma + lancamento.valor, 0);
+  return { entradas, gastos };
+}
+
+// Dinheiro que foi para contas que rendem no mês (transferências de entrada menos resgates).
+function guardadoNoMes(estado, mes) {
+  const rendem = new Set(contasQueRendem(estado).map((conta) => conta.id));
+  let guardado = 0;
+  for (const lancamento of lancamentosDoMes(estado.lancamentos, mes)) {
+    if (lancamento.tipo !== 'transferencia') continue;
+    const saiDeQueRende = rendem.has(lancamento.instituicaoId);
+    const vaiParaQueRende = rendem.has(lancamento.destinoId);
+    if (vaiParaQueRende && !saiDeQueRende) guardado += lancamento.valor;
+    if (saiDeQueRende && !vaiParaQueRende) guardado -= lancamento.valor;
+  }
+  return guardado;
+}
+
+function diasNoMes(mes) {
+  return Number(dataNoMes(mes, 31).slice(8));
+}
+
+// Quanto ainda posso gastar = entradas do mês − gastos do mês (competência) − meta de guardar (% das entradas).
+// Transferir para a caixinha não é gasto: cumpre a meta de guardar, que já foi descontada.
+export function planoDoMes(estado, mes, hoje) {
+  const entradas = resumoDoMes(estado, mes).receitas;
+  const gastos = gastosDoMes(estado.lancamentos, mes);
+  const metaGuardar = Math.round((entradas * estado.percentualGuardar) / 100);
+  const podeGastar = entradas - gastos - metaGuardar;
+  const ehMesAtual = mes === mesDe(hoje);
+  const diasRestantes = ehMesAtual ? diasNoMes(mes) - Number(hoje.slice(8)) + 1 : null;
+  return {
+    entradas,
+    gastos,
+    metaGuardar,
+    guardado: guardadoNoMes(estado, mes),
+    podeGastar,
+    porDia: ehMesAtual && podeGastar > 0 ? Math.floor(podeGastar / diasRestantes) : null,
+    diasRestantes,
+  };
+}
+
+// Dicas a partir dos números da pessoa, da mais urgente para a menos. Só entra o que vale para ela agora.
+export function dicasDoMes(estado, mes, hoje) {
+  const dicas = [];
+  const plano = planoDoMes(estado, mes, hoje);
+  const ehMesAtual = mes === mesDe(hoje);
+
+  if (plano.entradas === 0) {
+    dicas.push({ nivel: 'dica', texto: 'Cadastre seu salário como conta fixa (Ajustes) para o app calcular quanto você pode gastar no mês.' });
+  } else if (plano.podeGastar < 0) {
+    dicas.push({ nivel: 'alerta', texto: `Os gastos do mês passaram ${formatarMoeda(-plano.podeGastar)} do planejado, já contando os ${formatarMoeda(plano.metaGuardar)} para guardar.` });
+  }
+
+  const gastosPorCat = gastosPorCategoria(estado.lancamentos, mes);
+  const categoriasComLimite = estado.categorias.filter((categoria) => categoria.tipo === 'despesa' && categoria.limite > 0);
+  const avisosDeCategoria = categoriasComLimite
+    .map((categoria) => ({ categoria, percentual: Math.round(((gastosPorCat.get(categoria.id) ?? 0) / categoria.limite) * 100) }))
+    .filter(({ percentual }) => percentual >= 80)
+    .sort((a, b) => b.percentual - a.percentual)
+    .slice(0, 2);
+  for (const { categoria, percentual } of avisosDeCategoria) {
+    const excesso = (gastosPorCat.get(categoria.id) ?? 0) - categoria.limite;
+    dicas.push(percentual > 100
+      ? { nivel: 'alerta', texto: `${categoria.nome} passou ${formatarMoeda(excesso)} do limite do mês.` }
+      : { nivel: 'atencao', texto: `${categoria.nome} já usou ${percentual}% do limite${ehMesAtual ? ` e faltam ${plano.diasRestantes} dias para o mês acabar` : ''}.` });
+  }
+
+  const diaDeHoje = Number(hoje.slice(8));
+  if (ehMesAtual && plano.entradas > 0 && plano.podeGastar >= 0 && diaDeHoje >= 5 && plano.gastos > 0) {
+    // Contas fixas (aluguel etc.) acontecem uma vez no mês: entram inteiras; só o gasto do dia a dia é projetado pelo ritmo.
+    const gastosFixos = despesasDoMesPorCompetencia(estado.lancamentos, mes)
+      .filter((lancamento) => lancamento.fixaId)
+      .reduce((soma, lancamento) => soma + lancamento.valor, 0);
+    const gastosDoDiaADia = plano.gastos - gastosFixos;
+    const projecao = gastosFixos + Math.round((gastosDoDiaADia / diaDeHoje) * diasNoMes(mes));
+    const planejado = plano.entradas - plano.metaGuardar;
+    if (projecao > planejado) {
+      dicas.push({ nivel: 'atencao', texto: `No ritmo de hoje você gastaria ${formatarMoeda(projecao)} no mês, ${formatarMoeda(projecao - planejado)} além do planejado.` });
+    }
+  }
+
+  if (ehMesAtual) {
+    const emBreve = lancamentosDoMes(estado.lancamentos, mes)
+      .filter((l) => l.tipo === 'despesa' && !l.credito && !l.pago && l.data >= hoje && Number(l.data.slice(8)) - diaDeHoje <= 3);
+    for (const conta of emBreve.slice(0, 2)) {
+      const dias = Number(conta.data.slice(8)) - diaDeHoje;
+      dicas.push({ nivel: 'atencao', texto: `${conta.descricao} vence ${dias === 0 ? 'hoje' : `em ${dias} dia${dias > 1 ? 's' : ''}`} (${formatarMoeda(conta.valor)}).` });
+    }
+  }
+
+  if (plano.entradas > 0) {
+    for (const instituicao of estado.instituicoes.filter((i) => i.temCartao)) {
+      const fatura = totalDaFatura(estado.lancamentos, instituicao.id, mes);
+      const percentual = Math.round((fatura / plano.entradas) * 100);
+      if (percentual > 30) {
+        dicas.push({ nivel: 'atencao', texto: `A fatura do ${instituicao.nome} deste mês é ${percentual}% do que entrou. Acima de 30% costuma apertar o orçamento.` });
+      }
+    }
+  }
+
+  if (plano.metaGuardar > 0 && plano.guardado < plano.metaGuardar) {
+    dicas.push({ nivel: 'dica', texto: `Faltam ${formatarMoeda(plano.metaGuardar - plano.guardado)} para a meta de guardar deste mês. Guardar assim que o salário cai evita gastar antes.` });
+  }
+
+  const mediaDeGastos = Math.round([1, 2, 3].reduce((soma, atras) => soma + gastosDoMes(estado.lancamentos, somarMeses(mesDe(hoje), -atras)), 0) / 3);
+  if (mediaDeGastos > 0) {
+    const reserva = contasQueRendem(estado).reduce((soma, conta) => soma + saldoComRendimento(estado, conta, hoje), 0);
+    const meses = reserva / mediaDeGastos;
+    if (meses < 6) {
+      dicas.push({ nivel: 'dica', texto: `Seu dinheiro guardado cobre ${meses.toFixed(1).replace('.', ',')} meses dos seus gastos. O recomendado é ter de 3 a 6 meses de reserva em algo que renda e possa ser resgatado na hora.` });
+    }
+  }
+
+  if (categoriasComLimite.length === 0 && plano.gastos > 0) {
+    dicas.push({ nivel: 'dica', texto: 'Coloque limite nas categorias em que você mais gasta (Ajustes). O app avisa quando estiver chegando perto.' });
+  }
+
+  const ordem = { alerta: 0, atencao: 1, dica: 2 };
+  return dicas.sort((a, b) => ordem[a.nivel] - ordem[b.nivel]);
+}
+
+// Mês em que o gasto "aconteceu" (competência): compra no cartão conta no mês da compra e cada parcela no mês seguinte,
+// e não no mês da fatura. Assim "quanto posso gastar" e o orçamento caem quando a pessoa passa o cartão.
+// "Falta pagar" e a lista de lançamentos continuam pelo mês da fatura, que é quando o dinheiro sai.
+export function mesDeCompetencia(lancamento) {
+  return lancamento.compra ? somarMeses(mesDe(lancamento.compra.dataCompra), lancamento.compra.numero - 1) : mesDe(lancamento.data);
+}
+
+function despesasDoMesPorCompetencia(lancamentos, mes) {
+  return lancamentos.filter((lancamento) => lancamento.tipo === 'despesa' && mesDeCompetencia(lancamento) === mes);
+}
+
+export function gastosDoMes(lancamentos, mes) {
+  return despesasDoMesPorCompetencia(lancamentos, mes).reduce((soma, lancamento) => soma + lancamento.valor, 0);
+}
+
 export function gastosPorCategoria(lancamentos, mes) {
   const totais = new Map();
-  for (const lancamento of lancamentosDoMes(lancamentos, mes)) {
-    if (lancamento.tipo !== 'despesa') continue;
+  for (const lancamento of despesasDoMesPorCompetencia(lancamentos, mes)) {
     totais.set(lancamento.categoriaId, (totais.get(lancamento.categoriaId) ?? 0) + lancamento.valor);
   }
   return totais;
