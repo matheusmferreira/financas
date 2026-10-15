@@ -96,6 +96,13 @@
         <ul class="lista" id="lista-instituicoes"></ul>
       </div>
       <div class="secao-ajuste">
+        <h2>CDI para o rendimento</h2>
+        <p class="ajuda">Usado nas instituições marcadas com "Rende % do CDI". É uma simulação: valor bruto, antes do imposto de renda.</p>
+        <label class="campo">CDI atual (% ao ano)
+          <input id="campo-cdi" inputmode="decimal" pattern="[0-9.,]*" placeholder="Ex.: 13,65" autocomplete="off">
+        </label>
+      </div>
+      <div class="secao-ajuste">
         <div class="secao-ajuste-topo"><h2>Contas fixas</h2><button class="botao-link" id="botao-nova-fixa">Adicionar</button></div>
         <p class="ajuda">Aluguel, internet, salário... Entram sozinhas todo mês para você só marcar quando pagar.</p>
         <ul class="lista" id="lista-fixas"></ul>
@@ -192,6 +199,12 @@
           <input type="number" name="diaVencimento" min="1" max="31" inputmode="numeric">
         </label>
       </div>
+      <label class="campo-check">
+        <input type="checkbox" name="rendeCdi"><span>Rende % do CDI (cofrinho, caixinha)</span>
+      </label>
+      <label class="campo" data-somente-cdi>Quantos % do CDI
+        <input name="percentualCdi" inputmode="decimal" pattern="[0-9.,]+" value="100" autocomplete="off">
+      </label>
       <label class="campo">Cor
         <input type="color" name="cor" value="#0f766e">
       </label>

@@ -1,7 +1,7 @@
 import {
   formatarMoeda, centavosParaTexto, lerValorEmCentavos, hojeISO, mesDe, somarMeses, dataNoMes, nomeDoMes, nomeDoDia,
   gerarParcelasDoCartao, chaveFatura, lancamentosDoMes, totalDaFatura, resumoDoMes, saldoDaInstituicao,
-  gastosPorCategoria, lancamentosDasFixas, valorMensalParaMeta,
+  gastosPorCategoria, lancamentosDasFixas, valorMensalParaMeta, rendimentoDaInstituicao,
 } from './calculos.js';
 
 const CHAVE_ARMAZENAMENTO = 'controle-financeiro:v1';
@@ -44,6 +44,7 @@ function estadoInicial() {
     faturasPagas: [],
     metas: [],
     ultimoPagamento: null,
+    cdiAnual: null,
   };
 }
 
@@ -212,13 +213,16 @@ function renderizarSaldosDasInstituicoes() {
   lista.replaceChildren();
   for (const instituicao of estado.instituicoes) {
     const cartao = clonarModelo('modelo-saldo-instituicao');
-    const saldo = saldoDaInstituicao(estado, instituicao);
-    const fatura = instituicao.temCartao ? totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel) : 0;
+    const rendimento = rendimentoDaInstituicao(estado, instituicao, hojeISO());
+    const saldo = saldoDaInstituicao(estado, instituicao) + rendimento;
+    const detalhes = [];
+    if (instituicao.temCartao) detalhes.push(`Fatura: ${formatarMoeda(totalDaFatura(estado.lancamentos, instituicao.id, mesVisivel))}`);
+    if (instituicao.percentualCdi) detalhes.push(estado.cdiAnual ? `Rendeu ${formatarMoeda(rendimento)}` : 'Informe o CDI em Ajustes');
     pintarMarcador(cartao, instituicao.cor);
     preencher(cartao, {
       nome: instituicao.nome,
       saldo: formatarMoeda(saldo),
-      detalhe: instituicao.temCartao ? `Fatura: ${formatarMoeda(fatura)}` : 'Saldo atual',
+      detalhe: detalhes.join(' · ') || 'Saldo atual',
     });
     cartao.querySelector('[data-campo="saldo"]').classList.toggle('negativo', saldo < 0);
     cartao.addEventListener('click', () => abrirInstituicao(instituicao));
@@ -436,12 +440,17 @@ function renderizarListaDeAjustes(idLista, itens, aoTocar) {
 function renderizarAjustes() {
   renderizarListaDeAjustes('#lista-instituicoes', estado.instituicoes.map((instituicao) => ({
     titulo: instituicao.nome,
-    detalhe: instituicao.temCartao
-      ? `Cartão: fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento}`
-      : 'Sem cartão de crédito',
+    detalhe: [
+      instituicao.temCartao ? `Cartão: fecha dia ${instituicao.diaFechamento}, vence dia ${instituicao.diaVencimento}` : null,
+      !instituicao.temCartao && !instituicao.percentualCdi ? 'Sem cartão' : null,
+      instituicao.percentualCdi ? `Rende ${String(instituicao.percentualCdi).replace('.', ',')}% do CDI` : null,
+    ].filter(Boolean).join(' · '),
     cor: instituicao.cor,
     origem: instituicao,
   })), abrirInstituicao);
+
+  const campoCdi = $('#campo-cdi');
+  if (document.activeElement !== campoCdi) campoCdi.value = estado.cdiAnual ? String(estado.cdiAnual).replace('.', ',') : '';
 
   renderizarListaDeAjustes('#lista-fixas', estado.fixas.map((fixa) => ({
     titulo: fixa.descricao,
@@ -616,6 +625,13 @@ const formInstituicao = $('#form-instituicao');
 
 function atualizarCamposDeCartao() {
   formInstituicao.querySelector('[data-somente-cartao]').hidden = !formInstituicao.temCartao.checked;
+  formInstituicao.querySelector('[data-somente-cdi]').hidden = !formInstituicao.rendeCdi.checked;
+}
+
+// Aceita "13,65" ou "13.65"; null para vazio ou inválido.
+function lerPercentual(texto) {
+  const numero = Number(String(texto ?? '').trim().replace(',', '.'));
+  return String(texto ?? '').trim() !== '' && Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
 function abrirInstituicao(instituicao) {
@@ -627,6 +643,8 @@ function abrirInstituicao(instituicao) {
     formInstituicao.temCartao.checked = instituicao.temCartao;
     formInstituicao.diaFechamento.value = instituicao.diaFechamento ?? '';
     formInstituicao.diaVencimento.value = instituicao.diaVencimento ?? '';
+    formInstituicao.rendeCdi.checked = Boolean(instituicao.percentualCdi);
+    if (instituicao.percentualCdi) formInstituicao.percentualCdi.value = String(instituicao.percentualCdi).replace('.', ',');
     formInstituicao.cor.value = instituicao.cor;
   }
   atualizarCamposDeCartao();
@@ -634,6 +652,21 @@ function abrirInstituicao(instituicao) {
 }
 
 formInstituicao.temCartao.addEventListener('change', atualizarCamposDeCartao);
+formInstituicao.rendeCdi.addEventListener('change', atualizarCamposDeCartao);
+
+$('#campo-cdi').addEventListener('change', (evento) => {
+  const texto = evento.target.value.trim();
+  const cdi = lerPercentual(texto);
+  if (texto !== '' && cdi === null) {
+    evento.target.setCustomValidity('Informe o CDI em % ao ano, ex.: 13,65.');
+    evento.target.reportValidity();
+    return;
+  }
+  evento.target.setCustomValidity('');
+  estado.cdiAnual = cdi;
+  salvarEstado();
+  renderizarTudo();
+});
 
 formInstituicao.nome.addEventListener('input', () => {
   if (emEdicao.instituicao) return;
@@ -651,6 +684,9 @@ ligarDialogo('dialogo-instituicao', {
     const diaVencimento = Number(dados.get('diaVencimento'));
     if (temCartao && !(diaFechamento >= 1 && diaFechamento <= 31)) return falharCampo(form.diaFechamento, 'Informe o dia do fechamento.');
     if (temCartao && !(diaVencimento >= 1 && diaVencimento <= 31)) return falharCampo(form.diaVencimento, 'Informe o dia do vencimento.');
+    const rendeCdi = dados.get('rendeCdi') === 'on';
+    const percentualCdi = rendeCdi ? lerPercentual(dados.get('percentualCdi')) : null;
+    if (rendeCdi && !(percentualCdi !== null && percentualCdi <= 300)) return falharCampo(form.percentualCdi, 'Informe o % do CDI, ex.: 100.');
     const original = emEdicao.instituicao;
     if (original?.temCartao && !temCartao && estado.lancamentos.some((l) => l.credito && l.instituicaoId === original.id)) {
       return falharCampo(form.temCartao, 'Há compras no crédito desta instituição. Exclua-as antes de tirar o cartão.');
@@ -662,6 +698,9 @@ ligarDialogo('dialogo-instituicao', {
       temCartao,
       diaFechamento: temCartao ? diaFechamento : null,
       diaVencimento: temCartao ? diaVencimento : null,
+      percentualCdi,
+      // O rendimento conta a partir do dia em que foi ligado; mudar só o % não reinicia a contagem.
+      rendeDesde: rendeCdi ? (original?.rendeDesde ?? hojeISO()) : null,
     };
     if (original) Object.assign(original, dadosInstituicao);
     else estado.instituicoes.push({ id: criarId(), ...dadosInstituicao });

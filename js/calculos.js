@@ -126,26 +126,54 @@ export function resumoDoMes(estado, mes) {
   return { receitas, despesas, saldo: receitas - despesas, aPagar: contasPendentes + faturasPendentes };
 }
 
-// Saldo da conta = saldo informado no cadastro + tudo que já foi pago/recebido por ela
-// (débito, Pix, dinheiro) ± transferências − faturas do cartão dela já marcadas como pagas.
+// Entradas e saídas de dinheiro da conta, com data: tudo que já foi pago/recebido por ela (débito, Pix, dinheiro),
+// transferências e faturas do cartão dela já marcadas como pagas (na data do vencimento).
 // Transferência só move dinheiro entre instituições: não entra em receitas/despesas do mês.
-export function saldoDaInstituicao(estado, instituicao) {
-  let saldo = instituicao.saldoInicial;
+function movimentosDaInstituicao(estado, instituicao) {
+  const movimentos = [];
   for (const lancamento of estado.lancamentos) {
     if (lancamento.credito || !lancamento.pago) continue;
     if (lancamento.tipo === 'transferencia') {
-      if (lancamento.instituicaoId === instituicao.id) saldo -= lancamento.valor;
-      if (lancamento.destinoId === instituicao.id) saldo += lancamento.valor;
+      if (lancamento.instituicaoId === instituicao.id) movimentos.push({ data: lancamento.data, valor: -lancamento.valor });
+      if (lancamento.destinoId === instituicao.id) movimentos.push({ data: lancamento.data, valor: lancamento.valor });
       continue;
     }
     if (lancamento.instituicaoId !== instituicao.id) continue;
-    saldo += lancamento.tipo === 'receita' ? lancamento.valor : -lancamento.valor;
+    movimentos.push({ data: lancamento.data, valor: lancamento.tipo === 'receita' ? lancamento.valor : -lancamento.valor });
   }
   for (const chave of estado.faturasPagas) {
     const [instituicaoId, mes] = chave.split('|');
-    if (instituicaoId === instituicao.id) saldo -= totalDaFatura(estado.lancamentos, instituicao.id, mes);
+    if (instituicaoId !== instituicao.id) continue;
+    movimentos.push({ data: dataNoMes(mes, instituicao.diaVencimento), valor: -totalDaFatura(estado.lancamentos, instituicao.id, mes) });
   }
-  return saldo;
+  return movimentos;
+}
+
+export function saldoDaInstituicao(estado, instituicao) {
+  return movimentosDaInstituicao(estado, instituicao).reduce((saldo, movimento) => saldo + movimento.valor, instituicao.saldoInicial);
+}
+
+export function diasCorridosEntre(dataInicialISO, dataFinalISO) {
+  const milissegundos = new Date(`${dataFinalISO}T12:00:00`) - new Date(`${dataInicialISO}T12:00:00`);
+  return Math.max(0, Math.round(milissegundos / 86400000));
+}
+
+// Simulação do quanto a conta rendeu: CDI informado pelo usuário aplicado a todo o período (não o histórico real),
+// juros compostos sobre cada entrada/saída desde a data dela, valor bruto (antes do IR).
+// O % do CDI incide na taxa diária de 252 dias úteis (como os bancos fazem); o período é contado em dias corridos
+// convertidos para 252/365, porque contar só seg–sex sem feriados dá 260 dias/ano e superestima ~3%.
+// O saldo informado no cadastro rende a partir de quando o rendimento foi ligado (rendeDesde);
+// cada lançamento rende desde a própria data, para depósitos antigos registrados depois também renderem.
+export function rendimentoDaInstituicao(estado, instituicao, hoje) {
+  if (!instituicao.percentualCdi || !estado.cdiAnual) return 0;
+  const taxaDiaria = ((1 + estado.cdiAnual / 100) ** (1 / 252) - 1) * (instituicao.percentualCdi / 100);
+  const movimentos = [{ data: instituicao.rendeDesde, valor: instituicao.saldoInicial }, ...movimentosDaInstituicao(estado, instituicao)];
+  let rendimento = 0;
+  for (const { data, valor } of movimentos) {
+    const diasUteisEquivalentes = (diasCorridosEntre(data, hoje) * 252) / 365;
+    rendimento += valor * ((1 + taxaDiaria) ** diasUteisEquivalentes - 1);
+  }
+  return Math.round(rendimento);
 }
 
 export function gastosPorCategoria(lancamentos, mes) {
