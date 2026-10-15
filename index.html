@@ -131,6 +131,7 @@
       <div class="segmentado">
         <label><input type="radio" name="tipo" value="despesa" checked><span>Saída</span></label>
         <label><input type="radio" name="tipo" value="receita"><span>Entrada</span></label>
+        <label><input type="radio" name="tipo" value="transferencia"><span>Transferência</span></label>
       </div>
       <label class="campo campo-valor">
         <span class="rotulo">Valor</span>
@@ -139,13 +140,17 @@
       <label class="campo">O que foi
         <input name="descricao" maxlength="60" placeholder="Ex.: Mercado" required>
       </label>
-      <fieldset class="campo">
+      <fieldset class="campo" data-sem-transferencia>
         <legend>Categoria</legend>
         <div class="chips" data-chips="categoriaId"></div>
       </fieldset>
       <fieldset class="campo">
         <legend data-rotulo-instituicao>Pagou com</legend>
         <div class="chips" data-chips="pagamento"></div>
+      </fieldset>
+      <fieldset class="campo" data-somente-transferencia>
+        <legend>Para</legend>
+        <div class="chips" data-chips="destinoId"></div>
       </fieldset>
       <label class="campo" data-somente-credito>Em quantas vezes
         <input type="number" name="parcelas" min="1" max="48" value="1" inputmode="numeric">

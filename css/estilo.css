@@ -453,7 +453,8 @@ dialog h3 { margin: 0 0 14px; font-size: 1.15rem; }
 
 .segmentado {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 4px;
   margin-bottom: 14px;
   padding: 4px;

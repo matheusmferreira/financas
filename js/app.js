@@ -77,6 +77,7 @@ function pintarMarcador(elemento, cor) {
 }
 
 function valorComSinal(lancamento) {
+  if (lancamento.tipo === 'transferencia') return `⇄ ${formatarMoeda(lancamento.valor)}`;
   return `${lancamento.tipo === 'receita' ? '+' : '−'} ${formatarMoeda(lancamento.valor)}`;
 }
 
@@ -303,6 +304,9 @@ function renderizarOrcamento() {
 }
 
 function detalheDoLancamento(lancamento) {
+  if (lancamento.tipo === 'transferencia') {
+    return `${buscarInstituicao(lancamento.instituicaoId)?.nome ?? ''} → ${buscarInstituicao(lancamento.destinoId)?.nome ?? ''}`;
+  }
   const partes = [buscarCategoria(lancamento.categoriaId)?.nome ?? 'Sem categoria'];
   const instituicao = buscarInstituicao(lancamento.instituicaoId);
   if (instituicao) partes.push(lancamento.credito ? `${instituicao.nome} crédito` : instituicao.nome);
@@ -471,23 +475,37 @@ function opcoesDePagamento(tipo) {
   return opcoes;
 }
 
-function atualizarFormLancamento({ categoriaId, pagamento } = {}) {
+function atualizarFormLancamento({ categoriaId, pagamento, destinoId } = {}) {
   const tipo = formLancamento.tipo.value;
+  const transferencia = tipo === 'transferencia';
   const categoriaAtual = categoriaId ?? formLancamento.querySelector('input[name="categoriaId"]:checked')?.value;
   const pagamentoAtual = pagamento ?? formLancamento.querySelector('input[name="pagamento"]:checked')?.value;
-  montarChips(formLancamento.querySelector('[data-chips="categoriaId"]'), 'categoriaId', opcoesDeCategoria(tipo), categoriaAtual);
+  const destinoAtual = destinoId ?? formLancamento.querySelector('input[name="destinoId"]:checked')?.value;
+  montarChips(formLancamento.querySelector('[data-chips="categoriaId"]'), 'categoriaId', transferencia ? [] : opcoesDeCategoria(tipo), categoriaAtual);
   const opcoesPagamento = opcoesDePagamento(tipo);
   const pagamentoValido = opcoesPagamento.some((opcao) => opcao.valor === pagamentoAtual) ? pagamentoAtual : opcoesPagamento[0]?.valor;
   montarChips(formLancamento.querySelector('[data-chips="pagamento"]'), 'pagamento', opcoesPagamento, pagamentoValido);
-  formLancamento.querySelector('[data-rotulo-instituicao]').textContent = tipo === 'receita' ? 'Recebeu em' : 'Pagou com';
+
+  // O destino não pode ser a própria instituição de origem.
+  const opcoesDestino = transferencia ? opcoesDeInstituicao().filter((opcao) => `${opcao.valor}|conta` !== pagamentoValido) : [];
+  const destinoValido = opcoesDestino.some((opcao) => opcao.valor === destinoAtual) ? destinoAtual : opcoesDestino[0]?.valor;
+  montarChips(formLancamento.querySelector('[data-chips="destinoId"]'), 'destinoId', opcoesDestino, destinoValido);
+
+  const rotulosInstituicao = { despesa: 'Pagou com', receita: 'Recebeu em', transferencia: 'De' };
+  formLancamento.querySelector('[data-rotulo-instituicao]').textContent = rotulosInstituicao[tipo];
   formLancamento.querySelector('[data-rotulo-pago]').textContent = tipo === 'receita' ? 'Já recebido' : 'Já pago';
+  formLancamento.querySelector('[data-sem-transferencia]').hidden = transferencia;
+  formLancamento.querySelector('[data-somente-transferencia]').hidden = !transferencia;
+  formLancamento.descricao.required = !transferencia;
+  formLancamento.descricao.placeholder = transferencia ? 'Opcional' : 'Ex.: Mercado';
   atualizarCamposDeCredito();
 }
 
 function atualizarCamposDeCredito() {
   const credito = formLancamento.querySelector('input[name="pagamento"]:checked')?.value.endsWith('|credito') ?? false;
+  const transferencia = formLancamento.tipo.value === 'transferencia';
   formLancamento.querySelector('[data-somente-credito]').hidden = !credito;
-  formLancamento.querySelector('[data-sem-credito]').hidden = credito;
+  formLancamento.querySelector('[data-sem-credito]').hidden = credito || transferencia;
 }
 
 function abrirLancamento(lancamento) {
@@ -509,6 +527,7 @@ function abrirLancamento(lancamento) {
   atualizarFormLancamento({
     categoriaId: lancamento?.categoriaId ?? null,
     pagamento: lancamento ? `${lancamento.instituicaoId}|${lancamento.credito ? 'credito' : 'conta'}` : estado.ultimoPagamento,
+    destinoId: lancamento?.destinoId ?? null,
   });
   abrirDialogo('dialogo-lancamento', { editando: Boolean(lancamento) });
   if (!lancamento) formLancamento.valor.focus();
@@ -525,6 +544,26 @@ ligarDialogo('dialogo-lancamento', {
     if (!valor) return falharCampo(form.valor, 'Informe um valor maior que zero.');
     const [instituicaoId, forma] = dados.get('pagamento').split('|');
     const original = emEdicao.lancamento;
+
+    if (dados.get('tipo') === 'transferencia') {
+      const destinoId = dados.get('destinoId');
+      if (!destinoId) return falharCampo(form.querySelector('input[name="pagamento"]'), 'Cadastre outra instituição para poder transferir.');
+      if (original) removerLancamento(original);
+      estado.lancamentos.push({
+        id: original?.id ?? criarId(),
+        tipo: 'transferencia',
+        valor,
+        data: dados.get('data'),
+        descricao: dados.get('descricao').trim() || 'Transferência',
+        instituicaoId,
+        destinoId,
+        credito: false,
+        pago: true,
+      });
+      estado.ultimoPagamento = dados.get('pagamento');
+      return null;
+    }
+
     const base = {
       tipo: dados.get('tipo'),
       descricao: dados.get('descricao').trim(),
@@ -565,7 +604,10 @@ ligarDialogo('dialogo-lancamento', {
 
 formLancamento.addEventListener('change', (evento) => {
   if (evento.target.name === 'tipo') atualizarFormLancamento();
-  if (evento.target.name === 'pagamento') atualizarCamposDeCredito();
+  if (evento.target.name === 'pagamento') {
+    if (formLancamento.tipo.value === 'transferencia') atualizarFormLancamento();
+    else atualizarCamposDeCredito();
+  }
 });
 
 // ---------- Instituição ----------
@@ -627,7 +669,8 @@ ligarDialogo('dialogo-instituicao', {
   },
   aoExcluir() {
     const instituicao = emEdicao.instituicao;
-    const emUso = estado.lancamentos.some((l) => l.instituicaoId === instituicao.id) || estado.fixas.some((f) => f.instituicaoId === instituicao.id);
+    const emUso = estado.lancamentos.some((l) => l.instituicaoId === instituicao.id || l.destinoId === instituicao.id)
+      || estado.fixas.some((f) => f.instituicaoId === instituicao.id);
     if (emUso) {
       alert('Esta instituição tem lançamentos ou contas fixas. Exclua ou mude esses itens antes.');
       return false;
@@ -863,6 +906,23 @@ $('#botao-instalar').addEventListener('click', async () => {
   const { outcome } = await pedidoDeInstalacao.userChoice;
   if (outcome === 'accepted') $('#aviso-instalar').hidden = true;
   pedidoDeInstalacao = null;
+});
+
+// ---------- Atualização automática ----------
+
+// O Android deixa o app aberto em segundo plano; ao voltar, a tela é a mesma de antes e nada novo é baixado.
+// Recarregar depois de um tempo fora traz a versão publicada. Com formulário aberto não recarrega, para não perder o que foi digitado.
+const MINUTOS_FORA_PARA_RECARREGAR = 10;
+let saiuDoAppEm = null;
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    saiuDoAppEm = Date.now();
+    return;
+  }
+  const minutosFora = saiuDoAppEm ? (Date.now() - saiuDoAppEm) / 60000 : 0;
+  const formularioAberto = document.querySelector('dialog[open]');
+  if (minutosFora >= MINUTOS_FORA_PARA_RECARREGAR && !formularioAberto) location.reload();
 });
 
 // ---------- Inicialização ----------

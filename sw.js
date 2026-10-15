@@ -1,6 +1,6 @@
 // Guarda os arquivos do app no celular para abrir sem internet.
 // Ao publicar uma nova versão, aumente o número em VERSAO para os celulares baixarem os arquivos novos.
-const VERSAO = 'financas-v3';
+const VERSAO = 'financas-v4';
 const ARQUIVOS = [
   './',
   'index.html',
@@ -27,10 +27,11 @@ self.addEventListener('activate', (evento) => {
 
 // Rede primeiro: com internet sempre abre a versão publicada mais nova (e atualiza a cópia guardada);
 // sem internet usa a cópia. Cache primeiro fazia cada atualização só aparecer na segunda abertura.
+// "no-cache" faz o navegador sempre confirmar com o GitHub (que manda guardar por 10 min); sem mudança volta um 304 pequeno.
 self.addEventListener('fetch', (evento) => {
   if (evento.request.method !== 'GET') return;
   evento.respondWith(
-    fetch(evento.request)
+    fetch(evento.request, { cache: 'no-cache' })
       .then((resposta) => {
         const copia = resposta.clone();
         caches.open(VERSAO).then((cache) => cache.put(evento.request, copia));

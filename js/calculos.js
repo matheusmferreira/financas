@@ -127,11 +127,18 @@ export function resumoDoMes(estado, mes) {
 }
 
 // Saldo da conta = saldo informado no cadastro + tudo que já foi pago/recebido por ela
-// (débito, Pix, dinheiro) − faturas do cartão dela já marcadas como pagas.
+// (débito, Pix, dinheiro) ± transferências − faturas do cartão dela já marcadas como pagas.
+// Transferência só move dinheiro entre instituições: não entra em receitas/despesas do mês.
 export function saldoDaInstituicao(estado, instituicao) {
   let saldo = instituicao.saldoInicial;
   for (const lancamento of estado.lancamentos) {
-    if (lancamento.instituicaoId !== instituicao.id || lancamento.credito || !lancamento.pago) continue;
+    if (lancamento.credito || !lancamento.pago) continue;
+    if (lancamento.tipo === 'transferencia') {
+      if (lancamento.instituicaoId === instituicao.id) saldo -= lancamento.valor;
+      if (lancamento.destinoId === instituicao.id) saldo += lancamento.valor;
+      continue;
+    }
+    if (lancamento.instituicaoId !== instituicao.id) continue;
     saldo += lancamento.tipo === 'receita' ? lancamento.valor : -lancamento.valor;
   }
   for (const chave of estado.faturasPagas) {
