@@ -147,7 +147,8 @@ function movimentosDaInstituicao(estado, instituicao) {
   const jaEstaNoSaldoInformado = (data) => Boolean(instituicao.saldoEm) && instituicao.saldoInicial !== 0 && data < instituicao.saldoEm;
   const movimentos = [];
   for (const lancamento of estado.lancamentos) {
-    if (lancamento.credito || !lancamento.pago) continue;
+    // jaNoSaldo: pago antes de a pessoa informar o saldo do banco, que já veio sem esse valor; não desconta de novo.
+    if (lancamento.credito || !lancamento.pago || lancamento.jaNoSaldo) continue;
     if (lancamento.tipo === 'transferencia') {
       if (lancamento.instituicaoId === instituicao.id) movimentos.push({ data: lancamento.data, valor: -lancamento.valor });
       if (lancamento.destinoId === instituicao.id) movimentos.push({ data: lancamento.data, valor: lancamento.valor });

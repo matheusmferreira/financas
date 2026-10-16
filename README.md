@@ -79,6 +79,7 @@ O site publicado não contém nenhum dado seu — os lançamentos ficam só no c
 ## Regras que evitam erro de conta
 
 - **Saldo na conta hoje** (cadastro da instituição/caixinha): guarda a data (`saldoEm`); lançamentos com data anterior já estão nesse saldo e não são descontados de novo. Saldo informado zero não tem nada embutido, então o histórico conta.
+- **Já estava no saldo** (`jaNoSaldo`): conta fixa nova com "Já paguei/recebi este mês", ou lançamento editado com "Já tinha saído do saldo que informei", conta como gasto/entrada do mês mas não mexe de novo no saldo do banco. Cobre instituições cadastradas antes do `saldoEm` e contas pagas adiantado.
 - **Data futura**: só mexe no saldo quando a data chega; lançamento novo com data futura nasce "a pagar".
 - **Fatura paga**: guarda o valor pago (`valoresFaturasPagas`); se entrar compra nela depois, a diferença volta a "Falta pagar".
 - **Fechamento dia 29–31** em mês curto vale o último dia daquele mês.

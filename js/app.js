@@ -484,6 +484,7 @@ function detalheDoLancamento(lancamento) {
   if (conta) partes.push(lancamento.credito ? `${conta} crédito` : conta);
   if (lancamento.compra?.parcelas > 1) partes.push(`${lancamento.compra.numero}/${lancamento.compra.parcelas}`);
   if (!lancamento.credito && !lancamento.pago) partes.push(lancamento.tipo === 'receita' ? 'a receber' : 'a pagar');
+  if (lancamento.jaNoSaldo) partes.push('já estava no saldo');
   return partes.join(' · ');
 }
 
@@ -832,6 +833,21 @@ function atualizarCamposDeCredito() {
   const transferencia = formLancamento.tipo.value === 'transferencia';
   formLancamento.querySelector('[data-somente-credito]').hidden = !credito;
   formLancamento.querySelector('[data-sem-credito]').hidden = credito || transferencia;
+  atualizarCampoJaNoSaldo();
+}
+
+// "Já estava no saldo": para pagamento feito antes de a pessoa informar o saldo do banco. Só aparece onde faz sentido
+// (pago, fora do cartão, editando ou com data passada), para não poluir o lançamento comum de hoje.
+function atualizarCampoJaNoSaldo() {
+  const credito = formLancamento.querySelector('input[name="pagamento"]:checked')?.value.endsWith('|credito') ?? false;
+  const tipo = formLancamento.tipo.value;
+  const mostrar = !credito && tipo !== 'transferencia' && formLancamento.pago.checked
+    && (Boolean(emEdicao.lancamento) || formLancamento.data.value < hojeISO());
+  formLancamento.querySelector('[data-ja-no-saldo]').hidden = !mostrar;
+  if (!mostrar) formLancamento.jaNoSaldo.checked = false;
+  formLancamento.querySelector('[data-rotulo-ja-no-saldo]').textContent = tipo === 'receita'
+    ? 'Já estava no saldo que informei (não somar de novo)'
+    : 'Já tinha saído do saldo que informei (não descontar de novo)';
 }
 
 // preenchimento: tipo, pagamento e destino já escolhidos (ex.: botão Guardar abre a transferência conta → caixinha).
@@ -847,6 +863,7 @@ function abrirLancamento(lancamento, preenchimento = {}) {
     formLancamento.data.value = compra ? compra.dataCompra : lancamento.data;
     formLancamento.parcelas.value = compra ? compra.parcelas : 1;
     formLancamento.pago.checked = lancamento.pago;
+    formLancamento.jaNoSaldo.checked = Boolean(lancamento.jaNoSaldo);
   } else {
     const hoje = hojeISO();
     formLancamento.data.value = mesDe(hoje) === mesVisivel ? hoje : `${mesVisivel}-01`;
@@ -915,6 +932,7 @@ ligarDialogo('dialogo-lancamento', {
     } else {
       const lancamento = { ...base, id: original?.id ?? criarId(), valor, data: dados.get('data'), credito: false, pago: dados.get('pago') === 'on' };
       if (original?.fixaId) lancamento.fixaId = original.fixaId;
+      if (dados.get('jaNoSaldo') === 'on') lancamento.jaNoSaldo = true;
       estado.lancamentos.push(lancamento);
     }
     estado.ultimoPagamento = dados.get('pagamento');
@@ -935,6 +953,7 @@ formLancamento.addEventListener('change', (evento) => {
   if (evento.target.name === 'tipo') atualizarFormLancamento();
   // Lançamento novo com data futura nasce "a pagar"; com data de hoje ou antes, "já pago".
   if (evento.target.name === 'data' && !emEdicao.lancamento) formLancamento.pago.checked = formLancamento.data.value <= hojeISO();
+  if (evento.target.name === 'data' || evento.target.name === 'pago') atualizarCampoJaNoSaldo();
   if (evento.target.name === 'pagamento') {
     if (formLancamento.tipo.value === 'transferencia') atualizarFormLancamento();
     else atualizarCamposDeCredito();
@@ -1176,6 +1195,9 @@ function atualizarFormFixa({ categoriaId, instituicaoId } = {}) {
   const instituicaoAtual = instituicaoId ?? formFixa.querySelector('input[name="instituicaoId"]:checked')?.value;
   montarChips(formFixa.querySelector('[data-chips="categoriaId"]'), 'categoriaId', opcoesDeCategoria(tipo), categoriaAtual);
   montarChips(formFixa.querySelector('[data-chips="instituicaoId"]'), 'instituicaoId', opcoesDeInstituicao(), instituicaoAtual ?? estado.instituicoes[0]?.id);
+  formFixa.querySelector('[data-rotulo-ja-pago-mes]').textContent = tipo === 'receita'
+    ? 'Já recebi este mês (o valor já está no saldo)'
+    : 'Já paguei este mês (o valor já saiu do saldo)';
 }
 
 function abrirFixa(fixa) {
@@ -1188,6 +1210,7 @@ function abrirFixa(fixa) {
     formFixa.dia.value = fixa.dia;
   }
   atualizarFormFixa({ categoriaId: fixa?.categoriaId ?? null, instituicaoId: fixa?.instituicaoId ?? null });
+  formFixa.querySelector('[data-somente-nova]').hidden = Boolean(fixa);
   abrirDialogo('dialogo-fixa', { titulo: fixa ? 'Editar conta fixa' : 'Nova conta fixa', editando: Boolean(fixa) });
 }
 
@@ -1223,7 +1246,15 @@ ligarDialogo('dialogo-fixa', {
         });
       }
     } else {
-      estado.fixas.push({ id: criarId(), inicio: mesDe(hojeISO()), ...dadosFixa });
+      const novaFixa = { id: criarId(), inicio: mesDe(hojeISO()), ...dadosFixa };
+      estado.fixas.push(novaFixa);
+      // Já pago/recebido este mês, antes de a pessoa informar o saldo: o mês atual entra pago e sem mexer no saldo.
+      if (dados.get('jaPagoEsteMes') === 'on') {
+        for (const { chave, lancamento } of lancamentosDasFixas({ ...estado, fixas: [novaFixa] }, novaFixa.inicio, criarId)) {
+          estado.fixasGeradas.push(chave);
+          estado.lancamentos.push({ ...lancamento, pago: true, jaNoSaldo: true });
+        }
+      }
     }
     return null;
   },

@@ -242,6 +242,9 @@
           <input type="checkbox" name="pago" checked><span data-rotulo-pago>Já pago</span>
         </label>
       </div>
+      <label class="campo-check" data-ja-no-saldo hidden>
+        <input type="checkbox" name="jaNoSaldo"><span data-rotulo-ja-no-saldo>Já tinha saído do saldo que informei (não descontar de novo)</span>
+      </label>
       <div class="acoes-dialogo">
         <button class="botao" value="salvar">Salvar</button>
         <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
@@ -348,6 +351,9 @@
         <legend>Instituição</legend>
         <div class="chips" data-chips="instituicaoId"></div>
       </fieldset>
+      <label class="campo-check" data-somente-nova>
+        <input type="checkbox" name="jaPagoEsteMes"><span data-rotulo-ja-pago-mes>Já paguei este mês (o valor já saiu do saldo)</span>
+      </label>
       <div class="acoes-dialogo">
         <button class="botao" value="salvar">Salvar</button>
         <button class="botao botao-secundario" value="cancelar" formnovalidate>Cancelar</button>
